@@ -20,8 +20,8 @@ export const PatternCanvas = forwardRef<PatternCanvasRef, PatternCanvasProps>(
     const lastPos = useRef({ x: 0, y: 0 })
 
     const drawPattern = useCallback((ctx: CanvasRenderingContext2D, width: number, height: number, withBackground: boolean) => {
-      // Clear canvas (white for export, dark for preview)
-      ctx.fillStyle = withBackground ? '#18181b' : '#ffffff'
+      // Clear canvas (black for export, dark for preview)
+      ctx.fillStyle = withBackground ? '#18181b' : '#000000'
       ctx.fillRect(0, 0, width, height)
 
       // Draw background with transform if present and requested
@@ -56,8 +56,8 @@ export const PatternCanvas = forwardRef<PatternCanvasRef, PatternCanvasProps>(
       const cx = width / 2
       const cy = height / 2
 
-      // Draw lattice points
-      ctx.fillStyle = withBackground ? 'rgba(59, 130, 246, 0.8)' : '#000000'
+      // Draw lattice points (white on black for export to match phase contrast)
+      ctx.fillStyle = withBackground ? 'rgba(59, 130, 246, 0.8)' : '#ffffff'
       const halfSize = squareSize / 2
 
       for (let i = -maxRange; i <= maxRange; i++) {
