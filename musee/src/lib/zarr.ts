@@ -32,11 +32,43 @@ async function listDirs(dir: FileSystemDirectoryHandle): Promise<string[]> {
 }
 
 /**
- * Discover all positions and crops inside a crops.zarr directory handle.
+ * Quick scan: list just the position IDs without reading any zarr arrays.
+ */
+export async function listPositions(
+  rootDirHandle: FileSystemDirectoryHandle
+): Promise<string[]> {
+  let posDir: FileSystemDirectoryHandle;
+  try {
+    posDir = await rootDirHandle.getDirectoryHandle("pos");
+  } catch {
+    return [];
+  }
+
+  const posIds = await listDirs(posDir);
+
+  // Filter to only positions that actually have a crop/ subdirectory
+  const valid: string[] = [];
+  for (const posId of posIds) {
+    try {
+      const posHandle = await posDir.getDirectoryHandle(posId);
+      await posHandle.getDirectoryHandle("crop");
+      valid.push(posId);
+    } catch {
+      continue;
+    }
+  }
+
+  return valid;
+}
+
+/**
+ * Discover positions and crops inside a crops.zarr directory handle.
+ * If `positionFilter` is provided, only those positions are scanned.
  */
 export async function discoverStore(
   rootDirHandle: FileSystemDirectoryHandle,
-  store: DirectoryStore
+  store: DirectoryStore,
+  positionFilter?: string[]
 ): Promise<StoreIndex> {
   const positions: string[] = [];
   const crops = new Map<string, CropInfo[]>();
@@ -49,7 +81,7 @@ export async function discoverStore(
   }
 
   const root = zarr.root(store);
-  const posIds = await listDirs(posDir);
+  const posIds = positionFilter ?? await listDirs(posDir);
 
   for (const posId of posIds) {
     let cropDir: FileSystemDirectoryHandle;
