@@ -14,7 +14,7 @@ import type { Calibration, Lattice, PatternConfigUm, Transform } from "@/types"
 
 interface SidebarProps {
   imageLoaded: boolean
-  onImageLoad: (img: HTMLImageElement) => void
+  onImageLoad: (img: HTMLImageElement, filename: string) => void
   onConfigLoad: (config: PatternConfigUm) => void
   calibration: Calibration
   onCalibrationChange: (cal: Calibration) => void

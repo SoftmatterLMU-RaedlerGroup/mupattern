@@ -10,6 +10,7 @@ import { patternToPixels, patternToYAML } from "@/lib/units"
 function App() {
   const canvasRef = useRef<UnifiedCanvasRef>(null)
   const [phaseContrast, setPhaseContrast] = useState<HTMLImageElement | null>(null)
+  const [imageBaseName, setImageBaseName] = useState<string>("pattern")
 
   const { calibration, setCalibration } = useCalibration()
   const { pattern, updateLattice, updateSquareSize, scalePattern, rotatePattern, loadConfig, reset: resetPattern } = usePattern()
@@ -22,6 +23,11 @@ function App() {
     [pattern, calibration]
   )
 
+  const handleImageLoad = useCallback((img: HTMLImageElement, filename: string) => {
+    setPhaseContrast(img)
+    setImageBaseName(filename)
+  }, [])
+
   const handleReset = useCallback(() => {
     resetPattern()
     resetTransform()
@@ -31,11 +37,11 @@ function App() {
     const yaml = patternToYAML(pattern, calibration)
     const blob = new Blob([yaml], { type: "text/yaml" })
     const link = document.createElement("a")
-    link.download = "pattern-config.yaml"
+    link.download = `${imageBaseName}_config.yaml`
     link.href = URL.createObjectURL(blob)
     link.click()
     URL.revokeObjectURL(link.href)
-  }, [pattern, calibration])
+  }, [pattern, calibration, imageBaseName])
 
   const handleExport = useCallback(() => {
     canvasRef.current?.exportAll()
@@ -48,6 +54,7 @@ function App() {
         <UnifiedCanvas
           ref={canvasRef}
           phaseContrast={phaseContrast}
+          imageBaseName={imageBaseName}
           patternPx={patternPx}
           transform={transform}
           onTransformUpdate={updateTransform}
@@ -58,7 +65,7 @@ function App() {
         />
         <Sidebar
           imageLoaded={!!phaseContrast}
-          onImageLoad={setPhaseContrast}
+          onImageLoad={handleImageLoad}
           onConfigLoad={loadConfig}
           calibration={calibration}
           onCalibrationChange={setCalibration}

@@ -4,6 +4,7 @@ import type { PatternPixels, Transform } from "@/types"
 
 interface UnifiedCanvasProps {
   phaseContrast: HTMLImageElement | null
+  imageBaseName: string
   patternPx: PatternPixels
   transform: Transform
   onTransformUpdate: (updates: Partial<Transform>) => void
@@ -20,7 +21,7 @@ export interface UnifiedCanvasRef {
 }
 
 export const UnifiedCanvas = forwardRef<UnifiedCanvasRef, UnifiedCanvasProps>(
-  function UnifiedCanvas({ phaseContrast, patternPx, transform, onTransformUpdate, onZoom, onRotate, sensitivity, onExportYAML }, ref) {
+  function UnifiedCanvas({ phaseContrast, imageBaseName, patternPx, transform, onTransformUpdate, onZoom, onRotate, sensitivity, onExportYAML }, ref) {
     const { theme } = useTheme()
     const canvasRef = useRef<HTMLCanvasElement>(null)
     type DragMode = "none" | "pan" | "rotate" | "resize"
@@ -264,10 +265,10 @@ export const UnifiedCanvas = forwardRef<UnifiedCanvasRef, UnifiedCanvasProps>(
       ctx.putImageData(imageData, 0, 0)
 
       const link = document.createElement("a")
-      link.download = "pattern-template.png"
+      link.download = `${imageBaseName}_mask.png`
       link.href = exportCanvas.toDataURL("image/png")
       link.click()
-    }, [phaseContrast, patternPx, transform, drawLattice])
+    }, [phaseContrast, imageBaseName, patternPx, transform, drawLattice])
 
     const exportCSV = useCallback(() => {
       const w = phaseContrast?.width ?? 2048
@@ -314,11 +315,11 @@ export const UnifiedCanvas = forwardRef<UnifiedCanvasRef, UnifiedCanvasProps>(
 
       const blob = new Blob([rows.join("\n")], { type: "text/csv" })
       const link = document.createElement("a")
-      link.download = "pattern-bboxes.csv"
+      link.download = `${imageBaseName}_bbox.csv`
       link.href = URL.createObjectURL(blob)
       link.click()
       URL.revokeObjectURL(link.href)
-    }, [phaseContrast, patternPx, transform])
+    }, [phaseContrast, imageBaseName, patternPx, transform])
 
     const exportAll = useCallback(() => {
       exportPNG()
