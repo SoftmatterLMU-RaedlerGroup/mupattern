@@ -2,7 +2,15 @@
 
 End-to-end pipeline for analyzing T-cell killing of cancer cells on micropatterns.
 
-Cancer cells adhere to micropatterns printed on glass. T-cells are added and kill cancer cells over time, causing them to detach. The pipeline classifies "cell present / absent" per micropattern crop per timepoint, then plots kill curves showing how many cells survive over time.
+MCF7 cancer cells adhere to micropatterns printed on glass. CAR-T cells are added and kill cancer cells over time, causing them to detach. The pipeline classifies "cell present / absent" per micropattern crop per timepoint, then plots kill curves showing how many cells survive over time.
+
+### Positions
+
+| Position | Condition | Description |
+|----------|-----------|-------------|
+| Pos140 | Control | MCF7 only, no T-cells |
+| Pos150 | Killing 2D | MCF7 + CAR-T cells in suspension |
+| Pos156 | Killing 3D | MCF7 + CAR-T cells in collagen gel |
 
 ## Pipeline overview
 
@@ -197,6 +205,14 @@ Run:
 
 ```bash
 cd mutrain
+
+# Using the pretrained model from HuggingFace:
+uv run mutrain predict run \
+  --config /path/to/predict.yaml \
+  --model keejkrej/mupattern-resnet18 \
+  --output /path/to/predictions.csv
+
+# Or using a local model directory:
 uv run mutrain predict run \
   --config /path/to/predict.yaml \
   --model /path/to/model/best \
@@ -233,7 +249,7 @@ Death times at `t=0` are excluded — a crop absent at `t=0` means no cell was e
 
 ## Results
 
-### Pos150 — T-cell experiment
+### Pos150 — Killing 2D (MCF7 + CAR-T in suspension)
 
 ![Kill curve Pos150 (cleaned)](data/plots/kill_curve_pos150_cleaned.png)
 
@@ -243,7 +259,17 @@ Death times at `t=0` are excluded — a crop absent at `t=0` means no cell was e
 - 0 survived (within the 50-timepoint window)
 - 70/125 crops had monotonicity violations (187 resurrection events) before cleaning
 
-### Pos140 — No T-cell control
+### Pos156 — Killing 3D (MCF7 + CAR-T in collagen gel)
+
+![Kill curve Pos156 (cleaned)](data/plots/kill_curve_pos156_cleaned.png)
+
+- 125 crops analyzed over 50 timepoints
+- 72 empty at `t=0`
+- 32 cells killed
+- 21 survived
+- 48/125 crops had monotonicity violations (1138 resurrection events) before cleaning — much noisier than 2D, likely due to collagen gel obscuring cells
+
+### Pos140 — Control (MCF7 only, no T-cells)
 
 ![Kill curve Pos140 (cleaned)](data/plots/kill_curve_pos140_cleaned.png)
 
@@ -257,12 +283,17 @@ Death times at `t=0` are excluded — a crop absent at `t=0` means no cell was e
 
 ```
 data/
+  pos140_bbox.csv           # Pos140 bounding boxes (339 crops, control — MCF7 only)
+  pos150_bbox.csv           # Pos150 bounding boxes (337 crops, killing 2D — MCF7 + CAR-T in suspension)
+  pos156_bbox.csv           # Pos156 bounding boxes (killing 3D — MCF7 + CAR-T in collagen gel)
   pos150_annotation.csv     # manual annotations (420 labels, 28 crops, t=0..21)
   plots/
     kill_curve_pos150.png           # raw predictions
     kill_curve_pos150_cleaned.png   # after monotonicity cleaning
     kill_curve_pos140.png           # control, raw
     kill_curve_pos140_cleaned.png   # control, cleaned
+    kill_curve_pos156.png           # killing 3D, raw
+    kill_curve_pos156_cleaned.png   # killing 3D, cleaned
 ```
 
 Model weights are hosted on HuggingFace: [keejkrej/mupattern-resnet18](https://huggingface.co/keejkrej/mupattern-resnet18)

@@ -109,11 +109,9 @@ def run(
         ),
     ],
     model: Annotated[
-        Path,
+        str,
         typer.Option(
-            exists=True,
-            file_okay=False,
-            help="Path to the trained model directory (e.g. model/best).",
+            help="Local path or HuggingFace repo ID (e.g. keejkrej/mupattern-resnet18).",
         ),
     ],
     output: Annotated[
