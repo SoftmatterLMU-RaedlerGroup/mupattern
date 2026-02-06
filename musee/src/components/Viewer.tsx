@@ -6,6 +6,7 @@ import { renderUint16ToCanvas } from "@/lib/render";
 import {
   type Annotations,
   annotationKey,
+  parseKey,
   downloadCSV,
   uploadCSV,
 } from "@/lib/annotations";
@@ -179,12 +180,25 @@ export function Viewer({ store, index }: ViewerProps) {
     }
   }, []);
 
+  // Build set of cropIds that have any annotation (at any timepoint)
+  const annotatedCrops = useRef(new Set<string>());
+  useEffect(() => {
+    const s = new Set<string>();
+    for (const [key] of annotations) {
+      const { cropId } = parseKey(key);
+      s.add(cropId);
+    }
+    annotatedCrops.current = s;
+  }, [annotations]);
+
   // Border color for annotation state
   function borderClass(cropId: string): string {
     const key = annotationKey(t, cropId);
     const label = annotations.get(key);
     if (label === true) return "ring-2 ring-blue-500";
     if (label === false) return "ring-2 ring-red-500";
+    // Green guide: annotated at another timepoint but not at current frame
+    if (annotatedCrops.current.has(cropId)) return "ring-2 ring-green-500";
     return "";
   }
 
