@@ -1,39 +1,51 @@
-import { useState, useCallback } from 'react'
-import { Pattern, Lattice, DEFAULT_PATTERN } from '../types'
+import { useState, useCallback } from "react"
+import type { PatternConfigUm, Lattice } from "@/types"
+import { DEFAULT_PATTERN_UM } from "@/types"
 
 export function usePattern() {
-  const [pattern, setPattern] = useState<Pattern>(DEFAULT_PATTERN)
+  const [pattern, setPattern] = useState<PatternConfigUm>(DEFAULT_PATTERN_UM)
 
   const updateLattice = useCallback((updates: Partial<Lattice>) => {
-    setPattern(prev => ({
+    setPattern((prev) => ({
       ...prev,
       lattice: { ...prev.lattice, ...updates },
     }))
   }, [])
 
   const updateSquareSize = useCallback((squareSize: number) => {
-    setPattern(prev => ({ ...prev, squareSize }))
+    setPattern((prev) => ({ ...prev, squareSize }))
+  }, [])
+
+  const scalePattern = useCallback((factor: number) => {
+    setPattern((prev) => ({
+      ...prev,
+      lattice: {
+        ...prev.lattice,
+        a: prev.lattice.a * factor,
+        b: prev.lattice.b * factor,
+      },
+      squareSize: prev.squareSize * factor,
+    }))
+  }, [])
+
+  const rotatePattern = useCallback((deltaRad: number) => {
+    setPattern((prev) => ({
+      ...prev,
+      lattice: {
+        ...prev.lattice,
+        alpha: prev.lattice.alpha + deltaRad,
+        beta: prev.lattice.beta + deltaRad,
+      },
+    }))
+  }, [])
+
+  const loadConfig = useCallback((config: PatternConfigUm) => {
+    setPattern(config)
   }, [])
 
   const reset = useCallback(() => {
-    setPattern(DEFAULT_PATTERN)
+    setPattern(DEFAULT_PATTERN_UM)
   }, [])
 
-  const exportConfig = useCallback(() => {
-    const blob = new Blob([JSON.stringify(pattern, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'pattern-config.json'
-    a.click()
-    URL.revokeObjectURL(url)
-  }, [pattern])
-
-  return {
-    pattern,
-    updateLattice,
-    updateSquareSize,
-    reset,
-    exportConfig,
-  }
+  return { pattern, updateLattice, updateSquareSize, scalePattern, rotatePattern, loadConfig, reset }
 }
