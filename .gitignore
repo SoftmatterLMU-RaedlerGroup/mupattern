@@ -27,3 +27,6 @@ __pycache__/
 
 # Firebase
 .firebase/
+
+# Model weights (too large for git)
+data/model/
