@@ -288,12 +288,9 @@ data/
   pos156_bbox.csv           # Pos156 bounding boxes (killing 3D — MCF7 + CAR-T in collagen gel)
   pos150_annotation.csv     # manual annotations (420 labels, 28 crops, t=0..21)
   plots/
-    kill_curve_pos150.png           # raw predictions
-    kill_curve_pos150_cleaned.png   # after monotonicity cleaning
-    kill_curve_pos140.png           # control, raw
-    kill_curve_pos140_cleaned.png   # control, cleaned
-    kill_curve_pos156.png           # killing 3D, raw
-    kill_curve_pos156_cleaned.png   # killing 3D, cleaned
+    kill_curve_pos150_cleaned.png   # killing 2D
+    kill_curve_pos156_cleaned.png   # killing 3D
+    kill_curve_pos140_cleaned.png   # control
 ```
 
 Model weights are hosted on HuggingFace: [keejkrej/mupattern-resnet18](https://huggingface.co/keejkrej/mupattern-resnet18)
