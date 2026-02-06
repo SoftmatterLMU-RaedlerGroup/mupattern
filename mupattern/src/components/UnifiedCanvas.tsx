@@ -4,6 +4,7 @@ import type { PatternPixels, Transform } from "@/types"
 
 interface UnifiedCanvasProps {
   phaseContrast: HTMLImageElement | null
+  canvasSize: { width: number; height: number }
   imageBaseName: string
   patternPx: PatternPixels
   transform: Transform
@@ -21,7 +22,7 @@ export interface UnifiedCanvasRef {
 }
 
 export const UnifiedCanvas = forwardRef<UnifiedCanvasRef, UnifiedCanvasProps>(
-  function UnifiedCanvas({ phaseContrast, imageBaseName, patternPx, transform, onTransformUpdate, onZoom, onRotate, sensitivity, onExportYAML }, ref) {
+  function UnifiedCanvas({ phaseContrast, canvasSize, imageBaseName, patternPx, transform, onTransformUpdate, onZoom, onRotate, sensitivity, onExportYAML }, ref) {
     const { theme } = useTheme()
     const canvasRef = useRef<HTMLCanvasElement>(null)
     type DragMode = "none" | "pan" | "rotate" | "resize"
@@ -193,25 +194,20 @@ export const UnifiedCanvas = forwardRef<UnifiedCanvasRef, UnifiedCanvasProps>(
       draw()
     }, [draw])
 
-    // Resize canvas when image loads
+    // Resize canvas when dimensions change
     useEffect(() => {
       const canvas = canvasRef.current
       if (!canvas) return
 
-      if (phaseContrast) {
-        canvas.width = phaseContrast.width
-        canvas.height = phaseContrast.height
-      } else {
-        canvas.width = 2048
-        canvas.height = 2048
-      }
+      canvas.width = canvasSize.width
+      canvas.height = canvasSize.height
       draw()
-    }, [phaseContrast, draw])
+    }, [canvasSize, draw])
 
-    // Export: white-on-black pattern, same dimensions as input
+    // Export: white-on-black pattern, same dimensions as canvas
     const exportPNG = useCallback(() => {
-      const w = phaseContrast?.width ?? 2048
-      const h = phaseContrast?.height ?? 2048
+      const w = canvasSize.width
+      const h = canvasSize.height
 
       const exportCanvas = document.createElement("canvas")
       exportCanvas.width = w
@@ -268,11 +264,11 @@ export const UnifiedCanvas = forwardRef<UnifiedCanvasRef, UnifiedCanvasProps>(
       link.download = `${imageBaseName}_mask.png`
       link.href = exportCanvas.toDataURL("image/png")
       link.click()
-    }, [phaseContrast, imageBaseName, patternPx, transform, drawLattice])
+    }, [canvasSize, imageBaseName, patternPx, transform, drawLattice])
 
     const exportCSV = useCallback(() => {
-      const w = phaseContrast?.width ?? 2048
-      const h = phaseContrast?.height ?? 2048
+      const w = canvasSize.width
+      const h = canvasSize.height
       const { lattice, squareSize } = patternPx
 
       const vec1 = {
@@ -319,7 +315,7 @@ export const UnifiedCanvas = forwardRef<UnifiedCanvasRef, UnifiedCanvasProps>(
       link.href = URL.createObjectURL(blob)
       link.click()
       URL.revokeObjectURL(link.href)
-    }, [phaseContrast, imageBaseName, patternPx, transform])
+    }, [canvasSize, imageBaseName, patternPx, transform])
 
     const exportAll = useCallback(() => {
       exportPNG()

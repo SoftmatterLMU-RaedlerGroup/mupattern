@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useMemo } from "react"
 import { Header } from "@/components/Header"
 import { Sidebar } from "@/components/Sidebar"
 import { UnifiedCanvas, type UnifiedCanvasRef } from "@/components/UnifiedCanvas"
+import { Landing, type StartConfig } from "@/components/Landing"
 import { usePattern } from "@/hooks/usePattern"
 import { useTransform } from "@/hooks/useTransform"
 import { useCalibration } from "@/hooks/useCalibration"
@@ -9,8 +10,10 @@ import { patternToPixels, patternToYAML } from "@/lib/units"
 
 function App() {
   const canvasRef = useRef<UnifiedCanvasRef>(null)
+  const [started, setStarted] = useState(false)
   const [phaseContrast, setPhaseContrast] = useState<HTMLImageElement | null>(null)
   const [imageBaseName, setImageBaseName] = useState<string>("pattern")
+  const [canvasSize, setCanvasSize] = useState<{ width: number; height: number }>({ width: 2048, height: 2048 })
 
   const { calibration, setCalibration } = useCalibration()
   const { pattern, updateLattice, updateSquareSize, scalePattern, rotatePattern, loadConfig, reset: resetPattern } = usePattern()
@@ -23,9 +26,23 @@ function App() {
     [pattern, calibration]
   )
 
+  const handleStart = useCallback((config: StartConfig) => {
+    if (config.kind === "image") {
+      setPhaseContrast(config.image)
+      setImageBaseName(config.filename)
+      setCanvasSize({ width: config.image.width, height: config.image.height })
+    } else {
+      setPhaseContrast(null)
+      setImageBaseName("pattern")
+      setCanvasSize({ width: config.width, height: config.height })
+    }
+    setStarted(true)
+  }, [])
+
   const handleImageLoad = useCallback((img: HTMLImageElement, filename: string) => {
     setPhaseContrast(img)
     setImageBaseName(filename)
+    setCanvasSize({ width: img.width, height: img.height })
   }, [])
 
   const handleReset = useCallback(() => {
@@ -47,13 +64,23 @@ function App() {
     canvasRef.current?.exportAll()
   }, [])
 
+  if (!started) {
+    return <Landing onStart={handleStart} />
+  }
+
   return (
     <div className="flex h-screen flex-col">
-      <Header />
+        <Header
+          imageBaseName={phaseContrast ? imageBaseName : null}
+          onImageLoad={handleImageLoad}
+          onConfigLoad={loadConfig}
+          onCalibrationLoad={setCalibration}
+        />
       <div className="flex flex-1 min-h-0">
         <UnifiedCanvas
           ref={canvasRef}
           phaseContrast={phaseContrast}
+          canvasSize={canvasSize}
           imageBaseName={imageBaseName}
           patternPx={patternPx}
           transform={transform}
@@ -64,9 +91,6 @@ function App() {
           onExportYAML={handleExportYAML}
         />
         <Sidebar
-          imageLoaded={!!phaseContrast}
-          onImageLoad={handleImageLoad}
-          onConfigLoad={loadConfig}
           calibration={calibration}
           onCalibrationChange={setCalibration}
           pattern={pattern}

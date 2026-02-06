@@ -2,8 +2,6 @@ import { ChevronsUpDown } from "lucide-react"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@mupattern/ui/components/ui/collapsible"
 import { Separator } from "@mupattern/ui/components/ui/separator"
 import { Button } from "@mupattern/ui/components/ui/button"
-import { ImageLoader } from "@/components/ImageLoader"
-import { ConfigLoader } from "@/components/ConfigLoader"
 import { CalibrationControls } from "@/components/CalibrationControls"
 import { PatternEditor } from "@/components/PatternEditor"
 import { TransformEditor } from "@/components/TransformEditor"
@@ -13,9 +11,6 @@ import { Label } from "@mupattern/ui/components/ui/label"
 import type { Calibration, Lattice, PatternConfigUm, Transform } from "@/types"
 
 interface SidebarProps {
-  imageLoaded: boolean
-  onImageLoad: (img: HTMLImageElement, filename: string) => void
-  onConfigLoad: (config: PatternConfigUm) => void
   calibration: Calibration
   onCalibrationChange: (cal: Calibration) => void
   pattern: PatternConfigUm
@@ -54,9 +49,6 @@ function Section({
 }
 
 export function Sidebar({
-  imageLoaded,
-  onImageLoad,
-  onConfigLoad,
   calibration,
   onCalibrationChange,
   pattern,
@@ -71,15 +63,6 @@ export function Sidebar({
 }: SidebarProps) {
   return (
     <aside className="w-80 flex-shrink-0 overflow-y-auto border-l border-border p-4 space-y-1">
-      <Section title="Image">
-        <div className="space-y-2">
-          <ImageLoader onLoad={onImageLoad} loaded={imageLoaded} />
-          <ConfigLoader onLoad={onConfigLoad} onCalibrationLoad={onCalibrationChange} />
-        </div>
-      </Section>
-
-      <Separator />
-
       <Section title="Calibration">
         <div className="space-y-3">
           <CalibrationControls
@@ -129,7 +112,7 @@ export function Sidebar({
         <Button variant="secondary" size="sm" className="flex-1" onClick={onReset}>
           Reset
         </Button>
-        <ExportButton onExport={onExport} disabled={!imageLoaded} />
+        <ExportButton onExport={onExport} />
       </div>
 
     </aside>
