@@ -1,18 +1,25 @@
 [project]
-name = "mucrop"
+name = "mutrain"
 version = "0.1.0"
-description = "Crop micropattern positions from tiled microscopy data into zarr stacks"
+description = "Train vision classifiers on cropped micropattern data"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "typer>=0.12",
+    "pyyaml>=6.0",
     "numpy>=1.26",
-    "tifffile>=2024.1",
     "zarr>=2.16,<3",
+    "datasets>=3.0",
+    "Pillow>=10.0",
+    "torch>=2.0",
+    "torchvision>=0.15",
+    "transformers>=4.40",
+    "evaluate>=0.4",
+    "scikit-learn>=1.4",
 ]
 
 [project.scripts]
-mucrop = "main:app"
+mutrain = "main:app"
 
 [build-system]
 requires = ["hatchling"]

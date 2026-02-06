@@ -295,8 +295,8 @@ export const UnifiedCanvas = forwardRef<UnifiedCanvasRef, UnifiedCanvasProps>(
       const maxDim = Math.max(w, h) * 2
       const maxRange = minLen > 0 ? Math.ceil(maxDim / minLen) + 2 : 20
 
-      const rows: string[] = ["cell,x,y,w,h"]
-      let cell = 0
+      const rows: string[] = ["crop,x,y,w,h"]
+      let crop = 0
 
       for (let i = -maxRange; i <= maxRange; i++) {
         for (let j = -maxRange; j <= maxRange; j++) {
@@ -307,8 +307,8 @@ export const UnifiedCanvas = forwardRef<UnifiedCanvasRef, UnifiedCanvasProps>(
 
           // Only include squares fully within image bounds
           if (bx >= 0 && by >= 0 && bx + squareSize <= w && by + squareSize <= h) {
-            rows.push(`${cell},${Math.round(bx)},${Math.round(by)},${Math.round(squareSize)},${Math.round(squareSize)}`)
-            cell++
+            rows.push(`${crop},${Math.round(bx)},${Math.round(by)},${Math.round(squareSize)},${Math.round(squareSize)}`)
+            crop++
           }
         }
       }

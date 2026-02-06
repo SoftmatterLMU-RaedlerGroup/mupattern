@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button"
+import { Button } from "@mupattern/ui/components/ui/button"
 
 interface ExportButtonProps {
   onExport: () => void

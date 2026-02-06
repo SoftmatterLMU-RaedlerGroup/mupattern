@@ -1,7 +1,7 @@
-import { Slider } from "@/components/ui/slider"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Button } from "@/components/ui/button"
+import { Slider } from "@mupattern/ui/components/ui/slider"
+import { Input } from "@mupattern/ui/components/ui/input"
+import { Label } from "@mupattern/ui/components/ui/label"
+import { Button } from "@mupattern/ui/components/ui/button"
 import { radToDeg, degToRad } from "@/lib/units"
 import type { Lattice, PatternConfigUm } from "@/types"
 
