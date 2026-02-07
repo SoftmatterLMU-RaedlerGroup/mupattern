@@ -1,6 +1,8 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { DirectoryStore } from "@/lib/directory-store";
 import { listPositions, discoverStore, type StoreIndex } from "@/lib/zarr";
+import { saveHandle, loadHandle } from "@/lib/idb-handle";
+import { viewerStore, setSelectedPositions } from "@/store";
 
 export function useZarrStore() {
   const [store, setStore] = useState<DirectoryStore | null>(null);
@@ -12,6 +14,51 @@ export function useZarrStore() {
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  /** Try to restore a previously-saved directory handle on mount. */
+  useEffect(() => {
+    let cancelled = false;
+
+    async function tryRestore() {
+      const handle = await loadHandle();
+      if (!handle || cancelled) return;
+
+      // Re-request read permission (browser may prompt the user)
+      const perm = await handle.requestPermission({ mode: "read" });
+      if (perm !== "granted" || cancelled) return;
+
+      const ds = new DirectoryStore(handle);
+      const positions = await listPositions(handle);
+      if (positions.length === 0 || cancelled) return;
+
+      setDirHandle(handle);
+      setStore(ds);
+      setAvailablePositions(positions);
+
+      // If we had previously selected positions, auto-reload them
+      const prevSelected = viewerStore.state.selectedPositions;
+      if (prevSelected.length > 0) {
+        // Filter to only positions that still exist
+        const valid = prevSelected.filter((p) => positions.includes(p));
+        if (valid.length > 0 && !cancelled) {
+          setLoading(true);
+          try {
+            const idx = await discoverStore(handle, ds, valid);
+            if (!cancelled && idx.positions.length > 0) {
+              setIndex(idx);
+            }
+          } catch {
+            // fall through to position picker
+          } finally {
+            if (!cancelled) setLoading(false);
+          }
+        }
+      }
+    }
+
+    tryRestore();
+    return () => { cancelled = true; };
+  }, []);
 
   /** Phase 1: Open directory and quickly list available positions. */
   const openDirectory = useCallback(async () => {
@@ -29,6 +76,9 @@ export function useZarrStore() {
         setError("No positions found. Expected layout: pos/{id}/crop/{id}/");
         return;
       }
+
+      // Persist handle for next reload
+      await saveHandle(handle);
 
       setDirHandle(handle);
       setStore(ds);
@@ -56,6 +106,8 @@ export function useZarrStore() {
           return;
         }
 
+        // Persist which positions were selected
+        setSelectedPositions(selected);
         setIndex(idx);
       } catch (e) {
         setError(String(e));

@@ -1,4 +1,5 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import { useStore } from "@tanstack/react-store";
 import type { DirectoryStore } from "@/lib/directory-store";
 import type { StoreIndex, CropInfo } from "@/lib/zarr";
 import { loadFrame } from "@/lib/zarr";
@@ -10,6 +11,15 @@ import {
   downloadCSV,
   uploadCSV,
 } from "@/lib/annotations";
+import {
+  viewerStore,
+  setAnnotations as persistAnnotations,
+  setSelectedPos as persistSelectedPos,
+  setT as persistT,
+  setPage as persistPage,
+  setContrast as persistContrast,
+  setAnnotating as persistAnnotating,
+} from "@/store";
 import { Slider } from "@mupattern/ui/components/ui/slider";
 import { Button } from "@mupattern/ui/components/ui/button";
 import { Switch } from "@mupattern/ui/components/ui/switch";
@@ -39,29 +49,82 @@ interface ViewerProps {
 
 export function Viewer({ store, index }: ViewerProps) {
   const { theme, toggleTheme } = useTheme();
-  const [selectedPos, setSelectedPos] = useState(index.positions[0] ?? "");
-  const [t, setT] = useState(0);
-  const [page, setPage] = useState(0);
+
+  // Persisted state from store
+  const selectedPos = useStore(viewerStore, (s) => s.selectedPos);
+  const t = useStore(viewerStore, (s) => s.t);
+  const page = useStore(viewerStore, (s) => s.page);
+  const contrastMin = useStore(viewerStore, (s) => s.contrastMin);
+  const contrastMax = useStore(viewerStore, (s) => s.contrastMax);
+  const annotating = useStore(viewerStore, (s) => s.annotating);
+  const annotationEntries = useStore(viewerStore, (s) => s.annotations);
+
+  // Derive annotations Map from persisted entries
+  const annotations: Annotations = useMemo(
+    () => new Map(annotationEntries),
+    [annotationEntries]
+  );
+
+  // Ephemeral state
   const [playing, setPlaying] = useState(false);
-  const [contrastMin, setContrastMin] = useState(0);
-  const [contrastMax, setContrastMax] = useState(65535);
-  const [autoContrastDone, setAutoContrastDone] = useState(false);
-  const [annotations, setAnnotations] = useState<Annotations>(new Map());
-  const [annotating, setAnnotating] = useState(false);
+  const [autoContrastDone, setAutoContrastDone] = useState(
+    // If we have persisted contrast values that aren't defaults, skip auto
+    contrastMin !== 0 || contrastMax !== 65535
+  );
 
   const canvasRefs = useRef<Map<string, HTMLCanvasElement>>(new Map());
   const playIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const crops: CropInfo[] = index.crops.get(selectedPos) ?? [];
+  // Validate persisted selectedPos against available positions
+  const validPos = index.positions.includes(selectedPos)
+    ? selectedPos
+    : index.positions[0] ?? "";
+
+  // Sync if the persisted pos was invalid
+  useEffect(() => {
+    if (validPos !== selectedPos) {
+      persistSelectedPos(validPos);
+    }
+  }, [validPos, selectedPos]);
+
+  const crops: CropInfo[] = index.crops.get(validPos) ?? [];
   const maxT = crops.length > 0 ? crops[0].shape[0] - 1 : 0;
   const totalPages = Math.ceil(crops.length / PAGE_SIZE);
-  const pageCrops = crops.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const clampedT = Math.min(t, maxT);
+  const clampedPage = Math.min(page, Math.max(0, totalPages - 1));
+  const pageCrops = crops.slice(clampedPage * PAGE_SIZE, (clampedPage + 1) * PAGE_SIZE);
+
+  // Sync clamped values back if needed
+  useEffect(() => {
+    if (clampedT !== t) persistT(clampedT);
+  }, [clampedT, t]);
+  useEffect(() => {
+    if (clampedPage !== page) persistPage(clampedPage);
+  }, [clampedPage, page]);
+
+  // Wrapped setters that persist
+  const setT = useCallback((v: number) => persistT(v), []);
+  const setPage = useCallback((v: number) => persistPage(v), []);
+  const setContrastMin = useCallback(
+    (v: number) => persistContrast(v, contrastMax),
+    [contrastMax]
+  );
+  const setContrastMax = useCallback(
+    (v: number) => persistContrast(contrastMin, v),
+    [contrastMin]
+  );
+  const setAnnotating = useCallback((v: boolean) => persistAnnotating(v), []);
+  const setAnnotations = useCallback(
+    (a: Annotations) => persistAnnotations(a),
+    []
+  );
 
   // Playback
   useEffect(() => {
     if (playing) {
       playIntervalRef.current = setInterval(() => {
-        setT((prev) => (prev >= maxT ? 0 : prev + 1));
+        const curr = viewerStore.state.t;
+        persistT(curr >= maxT ? 0 : curr + 1);
       }, 500);
     }
     return () => {
@@ -76,7 +139,7 @@ export function Viewer({ store, index }: ViewerProps) {
     async function loadPage() {
       const frames = await Promise.all(
         pageCrops.map((crop) =>
-          loadFrame(store, crop.posId, crop.cropId, t).catch(() => null)
+          loadFrame(store, crop.posId, crop.cropId, clampedT).catch(() => null)
         )
       );
 
@@ -96,8 +159,7 @@ export function Viewer({ store, index }: ViewerProps) {
           const sorted = new Uint16Array(allData).sort();
           const lo = sorted[Math.floor(sorted.length * 0.02)];
           const hi = sorted[Math.floor(sorted.length * 0.98)];
-          setContrastMin(lo);
-          setContrastMax(hi);
+          persistContrast(lo, hi);
           setAutoContrastDone(true);
         }
       }
@@ -123,7 +185,7 @@ export function Viewer({ store, index }: ViewerProps) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store, selectedPos, t, page, contrastMin, contrastMax, autoContrastDone]);
+  }, [store, validPos, clampedT, clampedPage, contrastMin, contrastMax, autoContrastDone]);
 
   const setCanvasRef = useCallback(
     (cropId: string) => (el: HTMLCanvasElement | null) => {
@@ -141,35 +203,31 @@ export function Viewer({ store, index }: ViewerProps) {
   }, []);
 
   const handleChangePos = useCallback((posId: string) => {
-    setSelectedPos(posId);
-    setT(0);
-    setPage(0);
+    persistSelectedPos(posId);
     setAutoContrastDone(false);
   }, []);
 
   // Annotation handler: click cycles true → false → remove
   const handleAnnotate = useCallback(
     (cropId: string) => {
-      setAnnotations((prev) => {
-        const key = annotationKey(t, cropId);
-        const next = new Map(prev);
-        const current = prev.get(key);
-        if (current === undefined) {
-          next.set(key, true);
-        } else if (current === true) {
-          next.set(key, false);
-        } else {
-          next.delete(key);
-        }
-        return next;
-      });
+      const key = annotationKey(clampedT, cropId);
+      const current = annotations.get(key);
+      const next = new Map(annotations);
+      if (current === undefined) {
+        next.set(key, true);
+      } else if (current === true) {
+        next.set(key, false);
+      } else {
+        next.delete(key);
+      }
+      setAnnotations(next);
     },
-    [t]
+    [clampedT, annotations, setAnnotations]
   );
 
   const handleSave = useCallback(() => {
-    downloadCSV(annotations, `annotations_pos${selectedPos}.csv`);
-  }, [annotations, selectedPos]);
+    downloadCSV(annotations, `annotations_pos${validPos}.csv`);
+  }, [annotations, validPos]);
 
   const handleLoad = useCallback(async () => {
     try {
@@ -178,27 +236,25 @@ export function Viewer({ store, index }: ViewerProps) {
     } catch {
       // user cancelled
     }
-  }, []);
+  }, [setAnnotations]);
 
   // Build set of cropIds that have any annotation (at any timepoint)
-  const annotatedCrops = useRef(new Set<string>());
-  useEffect(() => {
+  const annotatedCrops = useMemo(() => {
     const s = new Set<string>();
     for (const [key] of annotations) {
       const { cropId } = parseKey(key);
       s.add(cropId);
     }
-    annotatedCrops.current = s;
+    return s;
   }, [annotations]);
 
   // Border color for annotation state
   function borderClass(cropId: string): string {
-    const key = annotationKey(t, cropId);
+    const key = annotationKey(clampedT, cropId);
     const label = annotations.get(key);
     if (label === true) return "ring-2 ring-blue-500";
     if (label === false) return "ring-2 ring-red-500";
-    // Green guide: annotated at another timepoint but not at current frame
-    if (annotatedCrops.current.has(cropId)) return "ring-2 ring-green-500";
+    if (annotatedCrops.has(cropId)) return "ring-2 ring-green-500";
     return "";
   }
 
@@ -220,7 +276,7 @@ export function Viewer({ store, index }: ViewerProps) {
         <div className="flex items-center gap-6">
           {index.positions.length > 1 && (
             <select
-              value={selectedPos}
+              value={validPos}
               onChange={(e) => handleChangePos(e.target.value)}
               className="bg-secondary text-secondary-foreground rounded px-2 py-1 text-sm"
             >
@@ -271,37 +327,37 @@ export function Viewer({ store, index }: ViewerProps) {
         <Slider
           min={0}
           max={maxT}
-          value={[t]}
+          value={[clampedT]}
           onValueChange={([v]) => setT(v)}
         />
       </div>
 
       {/* Frame controls + contrast */}
       <div className="flex items-center justify-center gap-3 px-4 py-2 border-b">
-        <Button variant="ghost" size="icon-xs" onClick={() => setT(0)} disabled={t === 0}>
+        <Button variant="ghost" size="icon-xs" onClick={() => setT(0)} disabled={clampedT === 0}>
           <SkipBack className="size-3" />
         </Button>
-        <Button variant="ghost" size="icon-xs" onClick={() => setT(Math.max(0, t - 10))} disabled={t === 0}>
+        <Button variant="ghost" size="icon-xs" onClick={() => setT(Math.max(0, clampedT - 10))} disabled={clampedT === 0}>
           <ChevronsLeft className="size-3" />
         </Button>
-        <Button variant="ghost" size="icon-xs" onClick={() => setT(Math.max(0, t - 1))} disabled={t === 0}>
+        <Button variant="ghost" size="icon-xs" onClick={() => setT(Math.max(0, clampedT - 1))} disabled={clampedT === 0}>
           <ChevronLeft className="size-3" />
         </Button>
         <Button variant="ghost" size="icon-xs" onClick={() => setPlaying(!playing)}>
           {playing ? <Pause className="size-3" /> : <Play className="size-3" />}
         </Button>
-        <Button variant="ghost" size="icon-xs" onClick={() => setT(Math.min(maxT, t + 1))} disabled={t >= maxT}>
+        <Button variant="ghost" size="icon-xs" onClick={() => setT(Math.min(maxT, clampedT + 1))} disabled={clampedT >= maxT}>
           <ChevronRight className="size-3" />
         </Button>
-        <Button variant="ghost" size="icon-xs" onClick={() => setT(Math.min(maxT, t + 10))} disabled={t >= maxT}>
+        <Button variant="ghost" size="icon-xs" onClick={() => setT(Math.min(maxT, clampedT + 10))} disabled={clampedT >= maxT}>
           <ChevronsRight className="size-3" />
         </Button>
-        <Button variant="ghost" size="icon-xs" onClick={() => setT(maxT)} disabled={t >= maxT}>
+        <Button variant="ghost" size="icon-xs" onClick={() => setT(maxT)} disabled={clampedT >= maxT}>
           <SkipForward className="size-3" />
         </Button>
 
         <span className="text-sm tabular-nums whitespace-nowrap">
-          t = {t} / {maxT}
+          t = {clampedT} / {maxT}
         </span>
 
         <div className="mx-2 h-4 w-px bg-border" />
@@ -354,19 +410,19 @@ export function Viewer({ store, index }: ViewerProps) {
 
       {/* Pagination */}
       <div className="flex items-center justify-center gap-2 px-4 py-2 border-t">
-        <Button variant="ghost" size="icon-xs" disabled={page === 0} onClick={() => setPage(0)}>
+        <Button variant="ghost" size="icon-xs" disabled={clampedPage === 0} onClick={() => setPage(0)}>
           <SkipBack className="size-3" />
         </Button>
-        <Button variant="ghost" size="icon-xs" disabled={page === 0} onClick={() => setPage(page - 1)}>
+        <Button variant="ghost" size="icon-xs" disabled={clampedPage === 0} onClick={() => setPage(clampedPage - 1)}>
           <ChevronLeft className="size-3" />
         </Button>
         <span className="text-sm tabular-nums">
-          Page {page + 1} / {totalPages}
+          Page {clampedPage + 1} / {totalPages}
         </span>
-        <Button variant="ghost" size="icon-xs" disabled={page >= totalPages - 1} onClick={() => setPage(page + 1)}>
+        <Button variant="ghost" size="icon-xs" disabled={clampedPage >= totalPages - 1} onClick={() => setPage(clampedPage + 1)}>
           <ChevronRight className="size-3" />
         </Button>
-        <Button variant="ghost" size="icon-xs" disabled={page >= totalPages - 1} onClick={() => setPage(totalPages - 1)}>
+        <Button variant="ghost" size="icon-xs" disabled={clampedPage >= totalPages - 1} onClick={() => setPage(totalPages - 1)}>
           <SkipForward className="size-3" />
         </Button>
       </div>

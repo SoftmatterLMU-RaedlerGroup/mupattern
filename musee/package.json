@@ -11,6 +11,8 @@
   "dependencies": {
     "@mupattern/ui": "workspace:*",
     "@tailwindcss/vite": "^4.1.18",
+    "@tanstack/react-store": "^0.8.0",
+    "@tanstack/store": "^0.8.0",
     "lucide-react": "^0.563.0",
     "numcodecs": "^0.3.2",
     "react": "^18.3.1",

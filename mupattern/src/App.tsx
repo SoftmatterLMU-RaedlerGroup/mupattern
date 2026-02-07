@@ -1,26 +1,67 @@
-import { useState, useCallback, useRef, useMemo } from "react"
+import { useCallback, useRef, useMemo, useState, useEffect } from "react"
+import { useStore } from "@tanstack/react-store"
 import { Header } from "@/components/Header"
 import { Sidebar } from "@/components/Sidebar"
 import { UnifiedCanvas, type UnifiedCanvasRef } from "@/components/UnifiedCanvas"
 import { Landing, type StartConfig } from "@/components/Landing"
-import { usePattern } from "@/hooks/usePattern"
-import { useTransform } from "@/hooks/useTransform"
-import { useCalibration } from "@/hooks/useCalibration"
 import { patternToPixels, patternToYAML } from "@/lib/units"
+import {
+  appStore,
+  startWithImage,
+  startFresh,
+  loadImage,
+  setPattern,
+  updateLattice,
+  updateSquareSize,
+  scalePattern,
+  rotatePattern,
+  updateTransform,
+  setCalibration,
+  setSensitivity,
+  resetPatternAndTransform,
+} from "@/store"
+
+/** Convert a data URL to an HTMLImageElement (async). */
+function useImageFromDataURL(dataURL: string | null): HTMLImageElement | null {
+  const [img, setImg] = useState<HTMLImageElement | null>(null)
+
+  useEffect(() => {
+    if (!dataURL) {
+      setImg(null)
+      return
+    }
+    const image = new Image()
+    image.onload = () => setImg(image)
+    image.src = dataURL
+  }, [dataURL])
+
+  return img
+}
+
+/** Convert an HTMLImageElement to a data URL. */
+function imageToDataURL(img: HTMLImageElement): string {
+  const canvas = document.createElement("canvas")
+  canvas.width = img.width
+  canvas.height = img.height
+  const ctx = canvas.getContext("2d")!
+  ctx.drawImage(img, 0, 0)
+  return canvas.toDataURL("image/png")
+}
 
 function App() {
   const canvasRef = useRef<UnifiedCanvasRef>(null)
-  const [started, setStarted] = useState(false)
-  const [phaseContrast, setPhaseContrast] = useState<HTMLImageElement | null>(null)
-  const [imageBaseName, setImageBaseName] = useState<string>("pattern")
-  const [canvasSize, setCanvasSize] = useState<{ width: number; height: number }>({ width: 2048, height: 2048 })
 
-  const { calibration, setCalibration } = useCalibration()
-  const { pattern, updateLattice, updateSquareSize, scalePattern, rotatePattern, loadConfig, reset: resetPattern } = usePattern()
-  const { transform, updateTransform, reset: resetTransform } = useTransform()
-  const [sensitivity, setSensitivity] = useState(0.5)
+  const started = useStore(appStore, (s) => s.started)
+  const imageDataURL = useStore(appStore, (s) => s.imageDataURL)
+  const imageBaseName = useStore(appStore, (s) => s.imageBaseName)
+  const canvasSize = useStore(appStore, (s) => s.canvasSize)
+  const pattern = useStore(appStore, (s) => s.pattern)
+  const transform = useStore(appStore, (s) => s.transform)
+  const calibration = useStore(appStore, (s) => s.calibration)
+  const sensitivity = useStore(appStore, (s) => s.sensitivity)
 
-  // Derive pixel-space pattern from µm config + calibration
+  const phaseContrast = useImageFromDataURL(imageDataURL)
+
   const patternPx = useMemo(
     () => patternToPixels(pattern, calibration),
     [pattern, calibration]
@@ -28,27 +69,17 @@ function App() {
 
   const handleStart = useCallback((config: StartConfig) => {
     if (config.kind === "image") {
-      setPhaseContrast(config.image)
-      setImageBaseName(config.filename)
-      setCanvasSize({ width: config.image.width, height: config.image.height })
+      const dataURL = imageToDataURL(config.image)
+      startWithImage(dataURL, config.filename, config.image.width, config.image.height)
     } else {
-      setPhaseContrast(null)
-      setImageBaseName("pattern")
-      setCanvasSize({ width: config.width, height: config.height })
+      startFresh(config.width, config.height)
     }
-    setStarted(true)
   }, [])
 
   const handleImageLoad = useCallback((img: HTMLImageElement, filename: string) => {
-    setPhaseContrast(img)
-    setImageBaseName(filename)
-    setCanvasSize({ width: img.width, height: img.height })
+    const dataURL = imageToDataURL(img)
+    loadImage(dataURL, filename, img.width, img.height)
   }, [])
-
-  const handleReset = useCallback(() => {
-    resetPattern()
-    resetTransform()
-  }, [resetPattern, resetTransform])
 
   const handleExportYAML = useCallback(() => {
     const yaml = patternToYAML(pattern, calibration)
@@ -70,12 +101,12 @@ function App() {
 
   return (
     <div className="flex h-screen flex-col">
-        <Header
-          imageBaseName={phaseContrast ? imageBaseName : null}
-          onImageLoad={handleImageLoad}
-          onConfigLoad={loadConfig}
-          onCalibrationLoad={setCalibration}
-        />
+      <Header
+        imageBaseName={phaseContrast ? imageBaseName : null}
+        onImageLoad={handleImageLoad}
+        onConfigLoad={setPattern}
+        onCalibrationLoad={setCalibration}
+      />
       <div className="flex flex-1 min-h-0">
         <UnifiedCanvas
           ref={canvasRef}
@@ -100,7 +131,7 @@ function App() {
           onTransformUpdate={updateTransform}
           sensitivity={sensitivity}
           onSensitivityChange={setSensitivity}
-          onReset={handleReset}
+          onReset={resetPatternAndTransform}
           onExport={handleExport}
         />
       </div>
