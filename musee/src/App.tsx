@@ -2,10 +2,13 @@ import { useZarrStore } from "@/hooks/useZarrStore";
 import { Viewer } from "@/components/Viewer";
 import { PositionPicker } from "@/components/PositionPicker";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { useTheme } from "@/components/ThemeProvider";
+import { HexBackground } from "@mupattern/ui/components/HexBackground";
 import { Button } from "@mupattern/ui/components/ui/button";
 import { FolderOpen } from "lucide-react";
 
 export default function App() {
+  const { theme } = useTheme();
   const {
     store,
     index,
@@ -24,8 +27,9 @@ export default function App() {
   // State 2: Position picker — directory opened, positions discovered, awaiting selection
   if (store && availablePositions) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen gap-6">
-        <div className="absolute top-4 right-4">
+      <div className="relative flex flex-col items-center justify-center h-screen gap-6">
+        <HexBackground theme={theme} />
+        <div className="absolute top-4 right-4 z-10">
           <ThemeToggle />
         </div>
         <h1 className="text-4xl tracking-tight" style={{ fontFamily: '"Bitcount", monospace' }}>MuSee</h1>
@@ -48,8 +52,9 @@ export default function App() {
 
   // State 1: Landing — prompt user to open a directory
   return (
-    <div className="flex flex-col items-center justify-center h-screen gap-6">
-      <div className="absolute top-4 right-4">
+    <div className="relative flex flex-col items-center justify-center h-screen gap-6">
+      <HexBackground theme={theme} />
+      <div className="absolute top-4 right-4 z-10">
         <ThemeToggle />
       </div>
       <h1 className="text-4xl tracking-tight" style={{ fontFamily: '"Bitcount", monospace' }}>MuSee</h1>

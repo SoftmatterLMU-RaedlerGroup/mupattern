@@ -24,7 +24,8 @@ export function patternToPixels(config: PatternConfigUm, cal: Calibration): Patt
       b: umToPixels(config.lattice.b, cal),
       beta: config.lattice.beta,
     },
-    squareSize: umToPixels(config.squareSize, cal),
+    width: umToPixels(config.width, cal),
+    height: umToPixels(config.height, cal),
   }
 }
 
@@ -40,7 +41,8 @@ export function patternToYAML(config: PatternConfigUm, cal: Calibration): string
     `  b: ${r(config.lattice.b)}  # µm`,
     `  beta: ${r(radToDeg(config.lattice.beta))}  # degrees`,
     "",
-    `square_size: ${r(config.squareSize)}  # µm`,
+    `width: ${r(config.width)}  # µm`,
+    `height: ${r(config.height)}  # µm`,
     "",
   ].join("\n")
 }
@@ -79,7 +81,8 @@ export function parseYAMLConfig(text: string): { pattern: PatternConfigUm; calib
       b: vals["lattice.b"] ?? 75,
       beta: degToRad(vals["lattice.beta"] ?? 90),
     },
-    squareSize: vals["square_size"] ?? 25,
+    width: vals["width"] ?? vals["square_size"] ?? 25,
+    height: vals["height"] ?? vals["square_size"] ?? 25,
   }
 
   const calibration = vals["calibration.um_per_pixel"] != null

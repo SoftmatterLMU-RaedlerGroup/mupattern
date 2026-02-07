@@ -15,7 +15,8 @@ interface SidebarProps {
   onCalibrationChange: (cal: Calibration) => void
   pattern: PatternConfigUm
   onLatticeUpdate: (updates: Partial<Lattice>) => void
-  onSquareSizeUpdate: (size: number) => void
+  onWidthUpdate: (width: number) => void
+  onHeightUpdate: (height: number) => void
   transform: Transform
   onTransformUpdate: (updates: Partial<Transform>) => void
   sensitivity: number
@@ -53,7 +54,8 @@ export function Sidebar({
   onCalibrationChange,
   pattern,
   onLatticeUpdate,
-  onSquareSizeUpdate,
+  onWidthUpdate,
+  onHeightUpdate,
   transform,
   onTransformUpdate,
   sensitivity,
@@ -93,7 +95,8 @@ export function Sidebar({
         <PatternEditor
           pattern={pattern}
           onLatticeUpdate={onLatticeUpdate}
-          onSquareSizeUpdate={onSquareSizeUpdate}
+          onWidthUpdate={onWidthUpdate}
+          onHeightUpdate={onHeightUpdate}
         />
       </Section>
 

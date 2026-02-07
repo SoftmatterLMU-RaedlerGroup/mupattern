@@ -32,7 +32,7 @@ const defaultState: AppState = {
   sensitivity: 0.5,
 }
 
-export const appStore = createPersistedStore<AppState>("mupattern-app", defaultState, {
+export const appStore = createPersistedStore<AppState>("muregister-app", defaultState, {
   debounceMs: 500,
 })
 
@@ -78,10 +78,17 @@ export function updateLattice(updates: Partial<Lattice>) {
   }))
 }
 
-export function updateSquareSize(squareSize: number) {
+export function updateWidth(width: number) {
   appStore.setState((s) => ({
     ...s,
-    pattern: { ...s.pattern, squareSize },
+    pattern: { ...s.pattern, width },
+  }))
+}
+
+export function updateHeight(height: number) {
+  appStore.setState((s) => ({
+    ...s,
+    pattern: { ...s.pattern, height },
   }))
 }
 
@@ -95,7 +102,8 @@ export function scalePattern(factor: number) {
         a: s.pattern.lattice.a * factor,
         b: s.pattern.lattice.b * factor,
       },
-      squareSize: s.pattern.squareSize * factor,
+      width: s.pattern.width * factor,
+      height: s.pattern.height * factor,
     },
   }))
 }

@@ -8,7 +8,8 @@ import type { Lattice, PatternConfigUm } from "@/types"
 interface PatternEditorProps {
   pattern: PatternConfigUm
   onLatticeUpdate: (updates: Partial<Lattice>) => void
-  onSquareSizeUpdate: (size: number) => void
+  onWidthUpdate: (width: number) => void
+  onHeightUpdate: (height: number) => void
 }
 
 function SliderRow({
@@ -59,8 +60,8 @@ function SliderRow({
   )
 }
 
-export function PatternEditor({ pattern, onLatticeUpdate, onSquareSizeUpdate }: PatternEditorProps) {
-  const { lattice, squareSize } = pattern
+export function PatternEditor({ pattern, onLatticeUpdate, onWidthUpdate, onHeightUpdate }: PatternEditorProps) {
+  const { lattice, width, height } = pattern
   const alphaDeg = radToDeg(lattice.alpha)
   const betaDeg = radToDeg(lattice.beta)
 
@@ -103,8 +104,10 @@ export function PatternEditor({ pattern, onLatticeUpdate, onSquareSizeUpdate }: 
 
       <div className="space-y-3">
         <p className="text-base font-medium text-muted-foreground uppercase tracking-wider">Shape</p>
-        <SliderRow label="Square" value={squareSize} min={0.5} max={100} step={0.5} unit="µm"
-          onChange={onSquareSizeUpdate} />
+        <SliderRow label="Width" value={width} min={0.5} max={100} step={0.5} unit="µm"
+          onChange={onWidthUpdate} />
+        <SliderRow label="Height" value={height} min={0.5} max={100} step={0.5} unit="µm"
+          onChange={onHeightUpdate} />
       </div>
     </div>
   )

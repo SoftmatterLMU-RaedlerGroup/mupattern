@@ -1,139 +1,64 @@
-import { useCallback, useRef, useMemo, useState, useEffect } from "react"
-import { useStore } from "@tanstack/react-store"
-import { Header } from "@/components/Header"
-import { Sidebar } from "@/components/Sidebar"
-import { UnifiedCanvas, type UnifiedCanvasRef } from "@/components/UnifiedCanvas"
-import { Landing, type StartConfig } from "@/components/Landing"
-import { patternToPixels, patternToYAML } from "@/lib/units"
-import {
-  appStore,
-  startWithImage,
-  startFresh,
-  loadImage,
-  setPattern,
-  updateLattice,
-  updateSquareSize,
-  scalePattern,
-  rotatePattern,
-  updateTransform,
-  setCalibration,
-  setSensitivity,
-  resetPatternAndTransform,
-} from "@/store"
+import { ThemeToggle } from "@/components/ThemeToggle"
+import { useTheme } from "@/components/ThemeProvider"
+import { HexBackground } from "@mupattern/ui/components/HexBackground"
+import { ArrowUpRight } from "lucide-react"
 
-/** Convert a data URL to an HTMLImageElement (async). */
-function useImageFromDataURL(dataURL: string | null): HTMLImageElement | null {
-  const [img, setImg] = useState<HTMLImageElement | null>(null)
-
-  useEffect(() => {
-    if (!dataURL) {
-      setImg(null)
-      return
-    }
-    const image = new Image()
-    image.onload = () => setImg(image)
-    image.src = dataURL
-  }, [dataURL])
-
-  return img
-}
-
-/** Convert an HTMLImageElement to a data URL. */
-function imageToDataURL(img: HTMLImageElement): string {
-  const canvas = document.createElement("canvas")
-  canvas.width = img.width
-  canvas.height = img.height
-  const ctx = canvas.getContext("2d")!
-  ctx.drawImage(img, 0, 0)
-  return canvas.toDataURL("image/png")
-}
+const apps = [
+  {
+    name: "MuRegister",
+    description: "Pattern-to-image registration for microscopy data",
+    href: "https://muregister-8415f.web.app",
+  },
+  {
+    name: "MuSee",
+    description: "Browse and explore microscopy image collections",
+    href: "https://musee-9d34d.web.app",
+  },
+]
 
 function App() {
-  const canvasRef = useRef<UnifiedCanvasRef>(null)
-
-  const started = useStore(appStore, (s) => s.started)
-  const imageDataURL = useStore(appStore, (s) => s.imageDataURL)
-  const imageBaseName = useStore(appStore, (s) => s.imageBaseName)
-  const canvasSize = useStore(appStore, (s) => s.canvasSize)
-  const pattern = useStore(appStore, (s) => s.pattern)
-  const transform = useStore(appStore, (s) => s.transform)
-  const calibration = useStore(appStore, (s) => s.calibration)
-  const sensitivity = useStore(appStore, (s) => s.sensitivity)
-
-  const phaseContrast = useImageFromDataURL(imageDataURL)
-
-  const patternPx = useMemo(
-    () => patternToPixels(pattern, calibration),
-    [pattern, calibration]
-  )
-
-  const handleStart = useCallback((config: StartConfig) => {
-    if (config.kind === "image") {
-      const dataURL = imageToDataURL(config.image)
-      startWithImage(dataURL, config.filename, config.image.width, config.image.height)
-    } else {
-      startFresh(config.width, config.height)
-    }
-  }, [])
-
-  const handleImageLoad = useCallback((img: HTMLImageElement, filename: string) => {
-    const dataURL = imageToDataURL(img)
-    loadImage(dataURL, filename, img.width, img.height)
-  }, [])
-
-  const handleExportYAML = useCallback(() => {
-    const yaml = patternToYAML(pattern, calibration)
-    const blob = new Blob([yaml], { type: "text/yaml" })
-    const link = document.createElement("a")
-    link.download = `${imageBaseName}_config.yaml`
-    link.href = URL.createObjectURL(blob)
-    link.click()
-    URL.revokeObjectURL(link.href)
-  }, [pattern, calibration, imageBaseName])
-
-  const handleExport = useCallback(() => {
-    canvasRef.current?.exportAll()
-  }, [])
-
-  if (!started) {
-    return <Landing onStart={handleStart} />
-  }
+  const { theme } = useTheme()
 
   return (
-    <div className="flex h-screen flex-col">
-      <Header
-        imageBaseName={phaseContrast ? imageBaseName : null}
-        onImageLoad={handleImageLoad}
-        onConfigLoad={setPattern}
-        onCalibrationLoad={setCalibration}
-      />
-      <div className="flex flex-1 min-h-0">
-        <UnifiedCanvas
-          ref={canvasRef}
-          phaseContrast={phaseContrast}
-          canvasSize={canvasSize}
-          imageBaseName={imageBaseName}
-          patternPx={patternPx}
-          transform={transform}
-          onTransformUpdate={updateTransform}
-          onZoom={scalePattern}
-          onRotate={rotatePattern}
-          sensitivity={sensitivity}
-          onExportYAML={handleExportYAML}
-        />
-        <Sidebar
-          calibration={calibration}
-          onCalibrationChange={setCalibration}
-          pattern={pattern}
-          onLatticeUpdate={updateLattice}
-          onSquareSizeUpdate={updateSquareSize}
-          transform={transform}
-          onTransformUpdate={updateTransform}
-          sensitivity={sensitivity}
-          onSensitivityChange={setSensitivity}
-          onReset={resetPatternAndTransform}
-          onExport={handleExport}
-        />
+    <div className="flex flex-col items-center justify-center h-screen gap-8">
+      <HexBackground theme={theme} />
+
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
+
+      <div className="text-center">
+        <h1
+          className="text-4xl tracking-tight"
+          style={{ fontFamily: '"Bitcount", monospace' }}
+        >
+          MuPattern
+        </h1>
+        <p className="text-muted-foreground mt-1">
+          Microscopy micropattern tools
+        </p>
+      </div>
+
+      <div className="flex gap-6 max-w-2xl w-full px-6">
+        {apps.map((app) => (
+          <a
+            key={app.name}
+            href={app.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 border rounded-lg p-8 hover:border-foreground/30 transition-colors group backdrop-blur-sm"
+          >
+            <div className="flex flex-col items-center gap-4">
+              <div className="flex items-center gap-2">
+                <p className="font-medium text-lg">{app.name}</p>
+                <ArrowUpRight className="size-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+              </div>
+              <p className="text-sm text-muted-foreground text-center">
+                {app.description}
+              </p>
+            </div>
+          </a>
+        ))}
       </div>
     </div>
   )

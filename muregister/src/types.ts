@@ -21,14 +21,16 @@ export interface Lattice {
 
 export interface PatternConfigUm {
   lattice: Lattice   // lengths in µm, angles in radians
-  squareSize: number  // µm
+  width: number       // µm
+  height: number      // µm
 }
 
 // --- Pattern in pixels (derived for canvas rendering) ---
 
 export interface PatternPixels {
   lattice: Lattice   // lengths in pixels, angles in radians
-  squareSize: number  // pixels
+  width: number       // pixels
+  height: number      // pixels
 }
 
 
@@ -55,5 +57,6 @@ export const DEFAULT_LATTICE_UM: Lattice = {
 
 export const DEFAULT_PATTERN_UM: PatternConfigUm = {
   lattice: DEFAULT_LATTICE_UM,
-  squareSize: 25,
+  width: 25,
+  height: 25,
 }

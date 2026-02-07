@@ -37,7 +37,7 @@ export const UnifiedCanvas = forwardRef<UnifiedCanvasRef, UnifiedCanvasProps>(
       tx: Transform,
       mode: "preview" | "export"
     ) => {
-      const { lattice, squareSize } = pattern
+      const { lattice, width: rectW, height: rectH } = pattern
       const vec1 = {
         x: lattice.a * Math.cos(lattice.alpha),
         y: lattice.a * Math.sin(lattice.alpha),
@@ -47,7 +47,8 @@ export const UnifiedCanvas = forwardRef<UnifiedCanvasRef, UnifiedCanvasProps>(
         y: lattice.b * Math.sin(lattice.beta),
       }
 
-      const halfSize = squareSize / 2
+      const halfW = rectW / 2
+      const halfH = rectH / 2
 
       // Center of canvas is the pattern origin, offset by translation
       const cx = width / 2
@@ -80,7 +81,7 @@ export const UnifiedCanvas = forwardRef<UnifiedCanvasRef, UnifiedCanvasProps>(
           const absY = Math.abs(y + tx.ty)
           if (absX > maxDim || absY > maxDim) continue
 
-          ctx.fillRect(x - halfSize, y - halfSize, squareSize, squareSize)
+          ctx.fillRect(x - halfW, y - halfH, rectW, rectH)
         }
       }
 
@@ -95,8 +96,8 @@ export const UnifiedCanvas = forwardRef<UnifiedCanvasRef, UnifiedCanvasProps>(
         const overlapOffsets = neighborOffsets
           .map(({ dx, dy }) => ({
             dx, dy,
-            ow: squareSize - Math.abs(dx),
-            oh: squareSize - Math.abs(dy),
+            ow: rectW - Math.abs(dx),
+            oh: rectH - Math.abs(dy),
           }))
           .filter(({ ow, oh }) => ow > 0 && oh > 0)
 
@@ -269,7 +270,7 @@ export const UnifiedCanvas = forwardRef<UnifiedCanvasRef, UnifiedCanvasProps>(
     const exportCSV = useCallback(() => {
       const w = canvasSize.width
       const h = canvasSize.height
-      const { lattice, squareSize } = patternPx
+      const { lattice, width: rectW, height: rectH } = patternPx
 
       const vec1 = {
         x: lattice.a * Math.cos(lattice.alpha),
@@ -282,7 +283,8 @@ export const UnifiedCanvas = forwardRef<UnifiedCanvasRef, UnifiedCanvasProps>(
 
       const cx = w / 2 + transform.tx
       const cy = h / 2 + transform.ty
-      const half = squareSize / 2
+      const halfW = rectW / 2
+      const halfH = rectH / 2
 
       const minLen = Math.min(
         Math.sqrt(vec1.x * vec1.x + vec1.y * vec1.y),
@@ -298,12 +300,12 @@ export const UnifiedCanvas = forwardRef<UnifiedCanvasRef, UnifiedCanvasProps>(
         for (let j = -maxRange; j <= maxRange; j++) {
           const px = cx + i * vec1.x + j * vec2.x
           const py = cy + i * vec1.y + j * vec2.y
-          const bx = px - half
-          const by = py - half
+          const bx = px - halfW
+          const by = py - halfH
 
-          // Only include squares fully within image bounds
-          if (bx >= 0 && by >= 0 && bx + squareSize <= w && by + squareSize <= h) {
-            rows.push(`${crop},${Math.round(bx)},${Math.round(by)},${Math.round(squareSize)},${Math.round(squareSize)}`)
+          // Only include rectangles fully within image bounds
+          if (bx >= 0 && by >= 0 && bx + rectW <= w && by + rectH <= h) {
+            rows.push(`${crop},${Math.round(bx)},${Math.round(by)},${Math.round(rectW)},${Math.round(rectH)}`)
             crop++
           }
         }

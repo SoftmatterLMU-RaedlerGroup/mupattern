@@ -88,9 +88,9 @@ export function Header({ imageBaseName, onImageLoad, onConfigLoad, onCalibration
     <header className="flex items-center justify-between px-4 py-3 border-b border-border">
       <div className="flex items-center gap-6">
         <div>
-          <h1 className="text-4xl tracking-tight" style={{ fontFamily: '"Bitcount", monospace' }}>MuPattern</h1>
+          <h1 className="text-4xl tracking-tight" style={{ fontFamily: '"Bitcount", monospace' }}>MuRegister</h1>
           <p className="text-base text-muted-foreground">
-            Microscopy pattern registration
+            Microscopy pattern-to-image registration
           </p>
         </div>
         <div className="mx-1 h-8 w-px bg-border" />

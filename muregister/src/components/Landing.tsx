@@ -2,9 +2,11 @@ import { useState, useCallback, useRef } from "react"
 import { Button } from "@mupattern/ui/components/ui/button"
 import { Input } from "@mupattern/ui/components/ui/input"
 import { Label } from "@mupattern/ui/components/ui/label"
+import { HexBackground } from "@mupattern/ui/components/HexBackground"
 import { ImageIcon, Ruler } from "lucide-react"
 import * as UTIF from "utif2"
 import { ThemeToggle } from "./ThemeToggle"
+import { useTheme } from "./ThemeProvider"
 
 const ACCEPTED_TYPES = new Set(["image/png", "image/tiff", "image/tif"])
 const TIFF_TYPES = new Set(["image/tiff", "image/tif"])
@@ -36,6 +38,7 @@ interface LandingProps {
 }
 
 export function Landing({ onStart }: LandingProps) {
+  const { theme } = useTheme()
   const inputRef = useRef<HTMLInputElement>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -139,6 +142,8 @@ export function Landing({ onStart }: LandingProps) {
 
   return (
     <div className="flex flex-col items-center justify-center h-screen gap-8">
+      <HexBackground theme={theme} />
+
       <div className="absolute top-4 right-4">
         <ThemeToggle />
       </div>
@@ -148,16 +153,16 @@ export function Landing({ onStart }: LandingProps) {
           className="text-4xl tracking-tight"
           style={{ fontFamily: '"Bitcount", monospace' }}
         >
-          MuPattern
+          MuRegister
         </h1>
         <p className="text-muted-foreground mt-1">
-          Microscopy pattern registration
+          Microscopy pattern-to-image registration
         </p>
       </div>
 
       <div className="flex gap-6 max-w-2xl w-full px-6">
         {/* Option 1: Load image */}
-        <div className="flex-1 border rounded-lg p-8">
+        <div className="flex-1 border rounded-lg p-8 backdrop-blur-sm bg-background/80">
           <input
             ref={inputRef}
             type="file"
@@ -187,7 +192,7 @@ export function Landing({ onStart }: LandingProps) {
         </div>
 
         {/* Option 2: Start fresh */}
-        <div className="flex-1 border rounded-lg p-8">
+        <div className="flex-1 border rounded-lg p-8 backdrop-blur-sm bg-background/80">
           <div className="flex flex-col items-center gap-4">
             <Ruler className="size-8 text-muted-foreground" />
             <p className="font-medium">Start fresh</p>

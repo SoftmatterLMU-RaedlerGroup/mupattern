@@ -3,6 +3,7 @@
   "workspaces": [
     "shared",
     "mupattern",
+    "muregister",
     "musee"
   ]
 }
