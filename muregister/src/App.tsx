@@ -104,6 +104,9 @@ function App() {
   const handleDetect = useCallback(() => {
     if (!phaseContrast) return
     const points = detectGridPoints(phaseContrast, 5)
+    if (points.length < 3) {
+      alert(`Detection found only ${points.length} point(s) — need at least 3. Try a different image.`)
+    }
     setDetectedPoints(points)
   }, [phaseContrast])
 
@@ -118,6 +121,8 @@ function App() {
         beta: fit.beta,
       })
       updateTransform({ tx: fit.tx, ty: fit.ty })
+    } else {
+      alert("Grid fitting failed — no matching lattice directions found. Try the other mode or adjust manually.")
     }
   }, [detectedPoints, canvasSize, calibration])
 
