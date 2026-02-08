@@ -1,10 +1,10 @@
 import { Store } from "@tanstack/store"
 
 /**
- * Create a TanStack Store that auto-persists to localStorage.
+ * Create a TanStack Store that auto-persists to sessionStorage.
  *
- * - On creation, hydrates from localStorage if available.
- * - On every state change, debounce-writes to localStorage.
+ * - On creation, hydrates from sessionStorage if available.
+ * - On every state change, debounce-writes to sessionStorage.
  */
 export function createPersistedStore<T>(
   key: string,
@@ -21,7 +21,7 @@ export function createPersistedStore<T>(
 
   let initial = defaultState
   try {
-    const raw = localStorage.getItem(key)
+    const raw = sessionStorage.getItem(key)
     if (raw !== null) {
       initial = deserialize(JSON.parse(raw))
     }
@@ -36,7 +36,7 @@ export function createPersistedStore<T>(
     if (timer) clearTimeout(timer)
     timer = setTimeout(() => {
       try {
-        localStorage.setItem(key, JSON.stringify(serialize(store.state)))
+        sessionStorage.setItem(key, JSON.stringify(serialize(store.state)))
       } catch {
         // storage full or unavailable
       }
