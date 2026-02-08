@@ -20,7 +20,10 @@ import {
   setCalibration,
   setSensitivity,
   resetPatternAndTransform,
+  setDetectedPoints,
 } from "@/store"
+import { detectGridPoints, fitGrid } from "@/lib/autodetect"
+import { pixelsToUm } from "@/lib/units"
 
 /** Convert a data URL to an HTMLImageElement (async). */
 function useImageFromDataURL(dataURL: string | null): HTMLImageElement | null {
@@ -60,6 +63,7 @@ function App() {
   const transform = useStore(appStore, (s) => s.transform)
   const calibration = useStore(appStore, (s) => s.calibration)
   const sensitivity = useStore(appStore, (s) => s.sensitivity)
+  const detectedPoints = useStore(appStore, (s) => s.detectedPoints)
 
   const phaseContrast = useImageFromDataURL(imageDataURL)
 
@@ -96,6 +100,23 @@ function App() {
     canvasRef.current?.exportAll()
   }, [])
 
+  const handleAutoDetect = useCallback((basisAngle: number) => {
+    if (!phaseContrast) return
+    const points = detectGridPoints(phaseContrast, 5, true)
+    setDetectedPoints(points)
+
+    const fit = fitGrid(points, canvasSize.width, canvasSize.height, basisAngle)
+    if (fit) {
+      updateLattice({
+        a: pixelsToUm(fit.a, calibration),
+        alpha: fit.alpha,
+        b: pixelsToUm(fit.b, calibration),
+        beta: fit.beta,
+      })
+      updateTransform({ tx: fit.tx, ty: fit.ty })
+    }
+  }, [phaseContrast, canvasSize, calibration])
+
   if (!started) {
     return <Landing onStart={handleStart} />
   }
@@ -121,6 +142,7 @@ function App() {
           onRotate={rotatePattern}
           sensitivity={sensitivity}
           onExportYAML={handleExportYAML}
+          detectedPoints={detectedPoints}
         />
         <Sidebar
           calibration={calibration}
@@ -135,6 +157,8 @@ function App() {
           onSensitivityChange={setSensitivity}
           onReset={resetPatternAndTransform}
           onExport={handleExport}
+          hasImage={!!phaseContrast}
+          onAutoDetect={handleAutoDetect}
         />
       </div>
     </div>

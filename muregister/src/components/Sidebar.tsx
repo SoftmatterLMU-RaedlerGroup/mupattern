@@ -23,6 +23,8 @@ interface SidebarProps {
   onSensitivityChange: (v: number) => void
   onReset: () => void
   onExport: () => void
+  hasImage: boolean
+  onAutoDetect: (basisAngle: number) => void
 }
 
 function Section({
@@ -62,6 +64,8 @@ export function Sidebar({
   onSensitivityChange,
   onReset,
   onExport,
+  hasImage,
+  onAutoDetect,
 }: SidebarProps) {
   return (
     <aside className="w-80 flex-shrink-0 overflow-y-auto border-l border-border p-4 space-y-1">
@@ -111,11 +115,33 @@ export function Sidebar({
 
       <Separator />
 
-      <div className="flex gap-2 pt-2">
-        <Button variant="secondary" size="sm" className="flex-1" onClick={onReset}>
-          Reset
-        </Button>
-        <ExportButton onExport={onExport} />
+      <div className="space-y-2 pt-2">
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1"
+            disabled={!hasImage}
+            onClick={() => onAutoDetect(Math.PI / 2)}
+          >
+            Auto square
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1"
+            disabled={!hasImage}
+            onClick={() => onAutoDetect(Math.PI / 3)}
+          >
+            Auto hex
+          </Button>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="secondary" size="sm" className="flex-1" onClick={onReset}>
+            Reset
+          </Button>
+          <ExportButton onExport={onExport} />
+        </div>
       </div>
 
     </aside>
