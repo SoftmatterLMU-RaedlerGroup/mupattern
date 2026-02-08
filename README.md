@@ -15,7 +15,7 @@ MCF7 cancer cells adhere to micropatterns printed on glass. CAR-T cells are adde
 ## Pipeline overview
 
 ```
-raw TIFFs ──► mupattern ──► bbox CSV ──► mucrop ──► crops.zarr
+ND2 ──► mufile convert ──► raw TIFFs ──► mupattern ──► bbox CSV ──► mufile crop ──► crops.zarr
                                                         │
                                                         ▼
                                                       musee ──► annotation CSV
@@ -41,7 +41,7 @@ raw TIFFs ──► mupattern ──► bbox CSV ──► mucrop ──► crop
 | Package | Language | Description |
 |---------|----------|-------------|
 | `mupattern/` | React/Vite | Fit a Bravais lattice grid to microscopy images, export bounding-box CSV |
-| `mucrop/` | Python CLI | Crop raw TIFFs into zarr arrays using the bounding-box CSV |
+| `mufile/` | Python CLI | Microscopy file utilities: convert ND2 → TIFF, crop TIFFs → zarr |
 | `musee/` | React/Vite | Browse crops in the zarr store, annotate cell presence/absence |
 | `mukill/` | Python CLI | Build HuggingFace Dataset, train ResNet-18 classifier, run inference, enforce monotonicity, plot kill curves |
 | `shared/` | React | Shared shadcn/ui components used by mupattern and musee |
@@ -50,7 +50,7 @@ raw TIFFs ──► mupattern ──► bbox CSV ──► mucrop ──► crop
 
 - [Bun](https://bun.sh/) for JavaScript/TypeScript packages
 - [uv](https://docs.astral.sh/uv/) for Python packages
-- Raw microscopy data: 2048x2048 uint16 TIFFs named `img_channel{C}_position{N}_time{T}_z{Z}.tif`, organized in `Pos{N}/` directories
+- Raw microscopy data: either an ND2 file (use `mufile convert` first) or 2048x2048 uint16 TIFFs named `img_channel{C}_position{N}_time{T}_z{Z}.tif` in `Pos{N}/` directories
 
 ## Step-by-step guide
 
@@ -78,13 +78,24 @@ In the app:
 
 The bbox CSV is the input for the next step. Repeat for each position if the pattern grid differs.
 
-### 2. Crop into zarr (mucrop)
+### 2a. Convert ND2 to TIFF (mufile convert)
+
+If your raw data is in Nikon ND2 format, convert it to per-position TIFF folders first:
+
+```bash
+cd mufile
+uv run mufile convert /path/to/data.nd2 --output /path/to/data
+```
+
+This reads the ND2 and writes one `Pos{N}/` folder per position, with TIFFs named `img_channel{C}_position{N}_time{T}_z{Z}.tif`. If `--output` is omitted, TIFFs are written next to the ND2 file in a folder with the same stem.
+
+### 2b. Crop into zarr (mufile crop)
 
 Cut each pattern site out of every frame and store as a zarr array.
 
 ```bash
-cd mucrop
-uv run mucrop \
+cd mufile
+uv run mufile crop \
   --input /path/to/data \
   --pos 150 \
   --bbox /path/to/bbox.csv \
@@ -302,7 +313,7 @@ uvx --from huggingface_hub hf download keejkrej/mupattern-resnet18 --local-dir .
 
 ## File formats
 
-### Bounding box CSV (mupattern → mucrop)
+### Bounding box CSV (mupattern → mufile crop)
 
 ```csv
 crop,x,y,w,h
@@ -353,12 +364,12 @@ cd mupattern && bun run dev
 cd musee && bun run dev
 
 # Run Python CLIs (uv manages virtualenvs automatically)
-cd mucrop && uv run mucrop --help
+cd mufile && uv run mufile --help
 cd mukill && uv run mukill --help
 ```
 
 ## Tech stack
 
 - **mupattern / musee**: React 18, TypeScript, Vite, Tailwind CSS 4, shadcn/ui, HTML5 Canvas, File System Access API
-- **mucrop**: Python, typer, zarr v2, tifffile, numpy
+- **mufile**: Python, typer, zarr v2, tifffile, numpy, nd2
 - **mukill**: Python, typer, transformers (HuggingFace), torch, zarr v2, datasets, evaluate, pandas, matplotlib

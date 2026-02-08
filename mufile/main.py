@@ -1,18 +1,9 @@
-"""mucrop – crop micropattern positions from tiled microscopy data into zarr stacks.
+"""mufile – microscopy file utilities.
 
-Reads a bounding-box CSV (from mupattern export) and a folder of per-position
-TIFFs, then writes one TCZYX zarr array per crop into a zarr
-DirectoryStore.
+Commands:
 
-Output layout::
-
-    crops.zarr/
-      pos/
-        150/            # position 150
-          crop/
-            000/        # crop 0 – shape (T, C, Z, Y, X)
-            001/        # crop 1
-            ...
+* ``mufile crop``    — crop micropattern positions from TIFFs into zarr stacks.
+* ``mufile convert`` — convert an ND2 file into per-position TIFF folders.
 """
 
 from __future__ import annotations
@@ -28,9 +19,11 @@ import typer
 import zarr
 from rich.progress import track
 
+app = typer.Typer(add_completion=False)
+
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Helpers (crop)
 # ---------------------------------------------------------------------------
 
 _TIFF_RE = re.compile(r"img_channel(\d+)_position(\d+)_time(\d+)_z(\d+)\.tif")
@@ -57,7 +50,7 @@ def _axis_range(index: dict[tuple[int, int, int], Path]) -> tuple[int, int, int]
 
 
 def _read_bbox_csv(csv_path: Path) -> list[dict[str, int]]:
-    """Parse the mupattern bbox CSV → list of {crop, x, y, w, h}."""
+    """Parse the mupattern bbox CSV -> list of {crop, x, y, w, h}."""
     rows: list[dict[str, int]] = []
     with open(csv_path, newline="") as fh:
         for row in csv.DictReader(fh):
@@ -65,12 +58,7 @@ def _read_bbox_csv(csv_path: Path) -> list[dict[str, int]]:
     return rows
 
 
-# ---------------------------------------------------------------------------
-# Core
-# ---------------------------------------------------------------------------
-
-
-def crop_position(
+def _crop_position(
     pos_dir: Path,
     pos: int,
     bboxes: list[dict[str, int]],
@@ -84,7 +72,6 @@ def crop_position(
     n_channels, n_times, n_z = _axis_range(index)
     typer.echo(f"Discovered {len(index)} TIFFs: T={n_times}, C={n_channels}, Z={n_z}")
 
-    # Read one frame to get dtype
     sample = tifffile.imread(next(iter(index.values())))
     dtype = sample.dtype
 
@@ -93,9 +80,8 @@ def crop_position(
     crop_grp = root.require_group(f"pos/{pos:03d}/crop")
 
     n_crops = len(bboxes)
-    typer.echo(f"Cropping {n_crops} crops …")
+    typer.echo(f"Cropping {n_crops} crops ...")
 
-    # Pre-allocate zarr arrays for every crop
     arrays: list[zarr.Array] = []
     for i, bb in enumerate(bboxes):
         arr = crop_grp.zeros(
@@ -109,8 +95,7 @@ def crop_position(
         arr.attrs["bbox"] = bb
         arrays.append(arr)
 
-    # Stream TIFFs and fill crops
-    sorted_keys = sorted(index.keys())  # (c, t, z) sorted
+    sorted_keys = sorted(index.keys())
     for c, t, z in track(sorted_keys, description="Reading frames"):
         frame = tifffile.imread(index[(c, t, z)])
         for crop_idx, bb in enumerate(bboxes):
@@ -121,14 +106,12 @@ def crop_position(
 
 
 # ---------------------------------------------------------------------------
-# CLI
+# Commands
 # ---------------------------------------------------------------------------
-
-app = typer.Typer(add_completion=False)
 
 
 @app.command()
-def main(
+def crop(
     input_dir: Annotated[
         Path,
         typer.Option(
@@ -155,7 +138,7 @@ def main(
         typer.Option(help="Output zarr store path (e.g. crops.zarr)."),
     ],
 ) -> None:
-    """Crop pattern positions from microscopy data into a zarr store."""
+    """Crop pattern positions from microscopy TIFFs into a zarr store."""
     pos_dir = input_dir / f"Pos{pos}"
     if not pos_dir.is_dir():
         typer.echo(f"Error: Position directory not found: {pos_dir}", err=True)
@@ -164,7 +147,107 @@ def main(
     bboxes = _read_bbox_csv(bbox)
     typer.echo(f"Loaded {len(bboxes)} bounding boxes from {bbox}")
 
-    crop_position(pos_dir, pos, bboxes, output)
+    _crop_position(pos_dir, pos, bboxes, output)
+
+
+@app.command()
+def convert(
+    nd2_file: Annotated[
+        Path,
+        typer.Argument(
+            exists=True,
+            dir_okay=False,
+            help="Path to the .nd2 file to convert.",
+        ),
+    ],
+    output: Annotated[
+        Path,
+        typer.Option(help="Output directory (will contain Pos*/... TIFF folders)."),
+    ] = None,
+) -> None:
+    """Convert an ND2 file into per-position TIFF folders.
+
+    Output layout::
+
+        output/
+          Pos140/
+            img_channel000_position140_time000000000_z000.tif
+          Pos150/
+            ...
+    """
+    import nd2
+
+    if output is None:
+        output = nd2_file.parent / nd2_file.stem
+
+    f = nd2.ND2File(str(nd2_file))
+    sizes = f.sizes
+    n_pos = sizes.get("P", 1)
+    n_time = sizes.get("T", 1)
+    n_chan = sizes.get("C", 1)
+    n_z = sizes.get("Z", 1)
+
+    # Build dimension order for indexing (excludes Y, X)
+    dim_order = [d for d in sizes.keys() if d not in ("Y", "X")]
+    dask_arr = f.to_dask()
+
+    # Get position names from ND2 metadata (e.g. "Pos140", "Pos150")
+    pos_names: list[str | None] = []
+    try:
+        exp = f.experiment
+        if exp:
+            for loop in exp:
+                if loop.type == "XYPosLoop":
+                    pos_names = [p.name for p in loop.parameters.points]
+                    break
+    except Exception:
+        pass
+
+    # Fill in missing names with Pos0, Pos1, ...
+    pos_names = [
+        name if name else f"Pos{i}"
+        for i, name in enumerate(pos_names)
+    ] or [f"Pos{i}" for i in range(n_pos)]
+
+    # Extract position number from name (e.g. "Pos140" -> 140)
+    def _pos_number(name: str) -> int:
+        m = re.search(r"(\d+)", name)
+        return int(m.group(1)) if m else 0
+
+    total = n_pos * n_time * n_chan * n_z
+    typer.echo(
+        f"ND2: {n_pos} positions, T={n_time}, C={n_chan}, Z={n_z} "
+        f"({total} frames total)"
+    )
+    typer.echo(f"Positions: {', '.join(pos_names)}")
+
+    output.mkdir(parents=True, exist_ok=True)
+
+    with typer.progressbar(length=total, label="Writing TIFFs") as progress:
+        for p_idx in range(n_pos):
+            pos_name = pos_names[p_idx]
+            pos_num = _pos_number(pos_name)
+            pos_dir = output / pos_name
+            pos_dir.mkdir(exist_ok=True)
+
+            for t in range(n_time):
+                for c in range(n_chan):
+                    for z in range(n_z):
+                        coords = {"P": p_idx, "T": t, "C": c, "Z": z}
+                        idx = tuple(coords.get(d, 0) for d in dim_order)
+                        frame = dask_arr[idx].compute()
+
+                        fname = (
+                            f"img_channel{c:03d}"
+                            f"_position{pos_num:03d}"
+                            f"_time{t:09d}"
+                            f"_z{z:03d}.tif"
+                        )
+                        tifffile.imwrite(str(pos_dir / fname), frame)
+                        progress.update(1)
+
+    f.close()
+    typer.echo(f"Wrote {output}")
 
 
 if __name__ == "__main__":
