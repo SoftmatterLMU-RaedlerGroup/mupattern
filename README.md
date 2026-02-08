@@ -297,14 +297,14 @@ Death times at `t=0` are excluded — a crop absent at `t=0` means no cell was e
 
 ### Expression — HuH7 Pos0
 
-![Expression Pos0](examples/expression_pos0.png)
+![Expression Pos0](examples/expression_pos0.jpg)
 
 - 145 crops, 180 timepoints, channel 1 (fluorescence)
 - Left: raw summed intensity per crop; Right: background-subtracted
 
 ### Expression — HuH7 Pos1
 
-![Expression Pos1](examples/expression_pos1.png)
+![Expression Pos1](examples/expression_pos1.jpg)
 
 - 169 crops, 180 timepoints, channel 1 (fluorescence)
 - Left: raw summed intensity per crop; Right: background-subtracted
@@ -327,8 +327,8 @@ examples/
   expression_pos1_bbox.csv          # Pos1 bounding boxes (HuH7)
   expression_pos0_config.yaml       # muexpression analyze config for Pos0
   expression_pos1_config.yaml       # muexpression analyze config for Pos1
-  expression_pos0.png               # expression curves — Pos0
-  expression_pos1.png               # expression curves — Pos1
+  expression_pos0.jpg               # expression curves — Pos0
+  expression_pos1.jpg               # expression curves — Pos1
 ```
 
 Model weights are hosted on HuggingFace: [keejkrej/mupattern-resnet18](https://huggingface.co/keejkrej/mupattern-resnet18)
