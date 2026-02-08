@@ -21,19 +21,19 @@ raw TIFFs ──► mupattern ──► bbox CSV ──► mucrop ──► crop
                                                       musee ──► annotation CSV
                                                         │
                                                         ▼
-                                              mutrain dataset create ──► HF Dataset
+                                                mukill dataset ──► HF Dataset
                                                         │
                                                         ▼
-                                                mutrain train run ──► model weights
+                                                  mukill train ──► model weights
                                                         │
                                                         ▼
-                                              mutrain predict run ──► predictions CSV
+                                                mukill predict ──► predictions CSV
                                                         │
                                                         ▼
-                                                mukill clean ──► cleaned CSV
+                                                  mukill clean ──► cleaned CSV
                                                         │
                                                         ▼
-                                                 mukill plot ──► kill curve plots
+                                                   mukill plot ──► kill curve plots
 ```
 
 ## Packages
@@ -43,8 +43,7 @@ raw TIFFs ──► mupattern ──► bbox CSV ──► mucrop ──► crop
 | `mupattern/` | React/Vite | Fit a Bravais lattice grid to microscopy images, export bounding-box CSV |
 | `mucrop/` | Python CLI | Crop raw TIFFs into zarr arrays using the bounding-box CSV |
 | `musee/` | React/Vite | Browse crops in the zarr store, annotate cell presence/absence |
-| `mutrain/` | Python CLI | Build HuggingFace Dataset, train ResNet-18 classifier, run inference |
-| `mukill/` | Python CLI | Enforce monotonicity on predictions, plot kill curves |
+| `mukill/` | Python CLI | Build HuggingFace Dataset, train ResNet-18 classifier, run inference, enforce monotonicity, plot kill curves |
 | `shared/` | React | Shared shadcn/ui components used by mupattern and musee |
 
 ## Prerequisites
@@ -137,7 +136,7 @@ Tips:
 - For each crop, annotate several timepoints covering the transition from present to absent
 - You need at least ~400 labeled samples for decent training. In our case, 28 crops × 15 timepoints = 420 labels
 
-### 4. Build training dataset (mutrain dataset)
+### 4. Build training dataset (mukill dataset)
 
 Convert the zarr crops + annotation CSV into a HuggingFace Dataset.
 
@@ -154,21 +153,21 @@ sources:
 Run:
 
 ```bash
-cd mutrain
-uv run mutrain dataset create \
+cd mukill
+uv run mukill dataset \
   --config /path/to/dataset.yaml \
   --output /path/to/dataset
 ```
 
 This reads every annotated `(t, crop)` pair from the zarr store, normalizes uint16 → uint8, and saves as a HuggingFace Dataset with columns: `image`, `label` (0=absent, 1=present), `pos`, `crop`, `t`.
 
-### 5. Train the classifier (mutrain train)
+### 5. Train the classifier (mukill train)
 
 Fine-tune a pretrained ResNet-18 on your dataset.
 
 ```bash
-cd mutrain
-uv run mutrain train run \
+cd mukill
+uv run mukill train \
   --dataset /path/to/dataset \
   --output /path/to/model \
   --epochs 20 \
@@ -186,7 +185,7 @@ Options:
 - `--lr` — learning rate (default: 1e-4)
 - `--split` — validation fraction (default: 0.2)
 
-### 6. Predict on all crops (mutrain predict)
+### 6. Predict on all crops (mukill predict)
 
 Run inference on the full zarr store (or a subset).
 
@@ -204,16 +203,16 @@ sources:
 Run:
 
 ```bash
-cd mutrain
+cd mukill
 
 # Using the pretrained model from HuggingFace:
-uv run mutrain predict run \
+uv run mukill predict \
   --config /path/to/predict.yaml \
   --model keejkrej/mupattern-resnet18 \
   --output /path/to/predictions.csv
 
 # Or using a local model directory:
-uv run mutrain predict run \
+uv run mukill predict \
   --config /path/to/predict.yaml \
   --model /path/to/model/best \
   --output /path/to/predictions.csv
@@ -311,7 +310,7 @@ crop,x,y,w,h
 1,22,1678,77,77
 ```
 
-### Annotation / prediction CSV (musee ↔ mutrain ↔ mukill)
+### Annotation / prediction CSV (musee ↔ mukill)
 
 ```csv
 t,crop,label
@@ -322,7 +321,7 @@ t,crop,label
 
 All tools use the same `t,crop,label` format. Labels are `true` (cell present) or `false` (cell absent).
 
-### Dataset config YAML (mutrain dataset)
+### Dataset config YAML (mukill dataset)
 
 ```yaml
 sources:
@@ -331,7 +330,7 @@ sources:
     annotations: /path/to/annotations.csv
 ```
 
-### Predict config YAML (mutrain predict)
+### Predict config YAML (mukill predict)
 
 ```yaml
 sources:
@@ -355,7 +354,6 @@ cd musee && bun run dev
 
 # Run Python CLIs (uv manages virtualenvs automatically)
 cd mucrop && uv run mucrop --help
-cd mutrain && uv run mutrain --help
 cd mukill && uv run mukill --help
 ```
 
@@ -363,5 +361,4 @@ cd mukill && uv run mukill --help
 
 - **mupattern / musee**: React 18, TypeScript, Vite, Tailwind CSS 4, shadcn/ui, HTML5 Canvas, File System Access API
 - **mucrop**: Python, typer, zarr v2, tifffile, numpy
-- **mutrain**: Python, typer, transformers (HuggingFace), torch, zarr v2, datasets, evaluate
-- **mukill**: Python, typer, pandas, matplotlib
+- **mukill**: Python, typer, transformers (HuggingFace), torch, zarr v2, datasets, evaluate, pandas, matplotlib
