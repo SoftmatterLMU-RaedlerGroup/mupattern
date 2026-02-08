@@ -116,28 +116,26 @@ export function Sidebar({
       <Separator />
 
       <div className="space-y-2 pt-2">
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="flex-1"
-            disabled={!hasImage}
-            onClick={() => onAutoDetect(Math.PI / 2)}
-          >
-            Auto square
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="flex-1"
-            disabled={!hasImage}
-            onClick={() => onAutoDetect(Math.PI / 3)}
-          >
-            Auto hex
-          </Button>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="secondary" size="sm" className="flex-1" onClick={onReset}>
+        <Button
+          variant="secondary"
+          size="sm"
+          className="w-full h-7 text-base"
+          disabled={!hasImage}
+          onClick={() => onAutoDetect(Math.PI / 2)}
+        >
+          Auto square (a=b)
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          className="w-full h-7 text-base"
+          disabled={!hasImage}
+          onClick={() => onAutoDetect(Math.PI / 3)}
+        >
+          Auto hex (a=b)
+        </Button>
+        <div className="flex gap-1.5">
+          <Button variant="secondary" size="sm" className="flex-1 h-7 text-base" onClick={onReset}>
             Reset
           </Button>
           <ExportButton onExport={onExport} />

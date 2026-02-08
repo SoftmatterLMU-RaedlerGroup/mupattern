@@ -331,38 +331,6 @@ export function findPeaks(
   return kept
 }
 
-/** Render a float buffer as a grayscale image and trigger download. */
-function debugDownload(data: Float32Array | Float64Array, w: number, h: number, name: string) {
-  const canvas = document.createElement("canvas")
-  canvas.width = w
-  canvas.height = h
-  const ctx = canvas.getContext("2d")!
-  const imgData = ctx.createImageData(w, h)
-
-  // Normalize to 0-255
-  let min = Infinity, max = -Infinity
-  for (let i = 0; i < data.length; i++) {
-    if (data[i] < min) min = data[i]
-    if (data[i] > max) max = data[i]
-  }
-  const range = max - min || 1
-
-  for (let i = 0; i < data.length; i++) {
-    const v = Math.round(((data[i] - min) / range) * 255)
-    const j = i * 4
-    imgData.data[j] = v
-    imgData.data[j + 1] = v
-    imgData.data[j + 2] = v
-    imgData.data[j + 3] = 255
-  }
-
-  ctx.putImageData(imgData, 0, 0)
-  const link = document.createElement("a")
-  link.download = `${name}.png`
-  link.href = canvas.toDataURL("image/png")
-  link.click()
-}
-
 /** Compute fractional lattice offset for a point, given basis vectors and canvas center. */
 function fractionalOffset(
   px: number, py: number,
@@ -453,23 +421,30 @@ export function fitGrid(
   const bins: Array<{ sumAng: number; sumMag: number; count: number }> = []
   for (let i = 0; i < NUM_BINS; i++) bins.push({ sumAng: 0, sumMag: 0, count: 0 })
 
+  const binEntries: Array<Array<{ ang: number; mag: number }>> = []
+  for (let i = 0; i < NUM_BINS; i++) binEntries.push([])
+
   for (const { ang, mag } of anglesAndMags) {
     const bin = Math.min(Math.floor(ang / BIN_WIDTH), NUM_BINS - 1)
-    bins[bin].sumAng += ang
-    bins[bin].sumMag += mag
-    bins[bin].count++
+    binEntries[bin].push({ ang, mag })
+  }
+
+  function median(arr: number[]): number {
+    const sorted = [...arr].sort((a, b) => a - b)
+    const mid = Math.floor(sorted.length / 2)
+    return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
   }
 
   // 4. Find the most populated bin → direction a
   let bestBinIdx = 0
   for (let i = 1; i < NUM_BINS; i++) {
-    if (bins[i].count > bins[bestBinIdx].count) bestBinIdx = i
+    if (binEntries[i].length > binEntries[bestBinIdx].length) bestBinIdx = i
   }
 
-  if (bins[bestBinIdx].count === 0) return null
+  if (binEntries[bestBinIdx].length === 0) return null
 
-  const alphaA = bins[bestBinIdx].sumAng / bins[bestBinIdx].count
-  const magA = bins[bestBinIdx].sumMag / bins[bestBinIdx].count
+  const alphaA = median(binEntries[bestBinIdx].map((e) => e.ang))
+  const magA = median(binEntries[bestBinIdx].map((e) => e.mag))
 
   // 5. Find best bin at basisAngle from a (within ±15°)
   const targetBin = Math.round(((alphaA + basisAngle) % Math.PI) / BIN_WIDTH) % NUM_BINS
@@ -478,33 +453,34 @@ export function fitGrid(
   let bestBCount = 0
   for (let offset = -SEARCH_RANGE; offset <= SEARCH_RANGE; offset++) {
     const idx = ((targetBin + offset) % NUM_BINS + NUM_BINS) % NUM_BINS
-    if (bins[idx].count > bestBCount) {
-      bestBCount = bins[idx].count
+    if (binEntries[idx].length > bestBCount) {
+      bestBCount = binEntries[idx].length
       bestBBinIdx = idx
     }
   }
 
-  if (bestBBinIdx < 0 || bestBCount === 0 || bestBCount < bins[bestBinIdx].count * 0.2) return null
+  if (bestBBinIdx < 0 || bestBCount === 0 || bestBCount < binEntries[bestBinIdx].length * 0.2) return null
 
-  const alphaB = bins[bestBBinIdx].sumAng / bins[bestBBinIdx].count
-  const magB = bins[bestBBinIdx].sumMag / bins[bestBBinIdx].count
+  const magB = median(binEntries[bestBBinIdx].map((e) => e.mag))
+
+  // a = b: average the two magnitudes
+  const mag = (magA + magB) / 2
+  let a = mag
+  let alpha = alphaA
 
   // Convert to basis vectors
-  const ax = magA * Math.cos(alphaA), ay = magA * Math.sin(alphaA)
-  const bx = magB * Math.cos(alphaB), by = magB * Math.sin(alphaB)
+  const ax = mag * Math.cos(alphaA), ay = mag * Math.sin(alphaA)
+  const bx = mag * Math.cos(alphaA + basisAngle), by = mag * Math.sin(alphaA + basisAngle)
   const det = ax * by - bx * ay
   if (Math.abs(det) < 1e-9) return null
-
-  let alpha = alphaA
-  let a = magA, b = magB
 
   // 6. Estimate origin
   let { tx, ty } = medianOrigin(points, ax, ay, bx, by, det, cx, cy)
 
-  // 7. Drop top 10% outliers upfront
-  function computeMSE(pts: Array<{ x: number; y: number }>, a: number, b: number, alpha: number, tx: number, ty: number): number {
+  // 7. Drop top 5% outliers upfront
+  function computeMSE(pts: Array<{ x: number; y: number }>, a: number, alpha: number, tx: number, ty: number): number {
     const ax = a * Math.cos(alpha), ay = a * Math.sin(alpha)
-    const bx = b * Math.cos(alpha + basisAngle), by = b * Math.sin(alpha + basisAngle)
+    const bx = a * Math.cos(alpha + basisAngle), by = a * Math.sin(alpha + basisAngle)
     const det = ax * by - bx * ay
     if (Math.abs(det) < 1e-9) return Infinity
     let sum = 0
@@ -519,22 +495,24 @@ export function fitGrid(
     r: latticeResidual2(p.x - tx, p.y - ty, ax, ay, bx, by, det, cx, cy),
   }))
   withRes.sort((a, b) => a.r - b.r)
-  const inliers = withRes.slice(0, Math.ceil(points.length * 0.9)).map((v) => v.p)
+  const inliers = withRes.slice(0, Math.ceil(points.length * 0.95)).map((v) => v.p)
 
-  // 8. Gradient descent on inliers
+  // 8. Gradient descent on inliers — params: [a, alpha, tx, ty], b=a
+  const init = [a, alpha, tx, ty]
+  const clampRange = [a * 0.1, 5 * Math.PI / 180, 10, 10]
   const MAX_ITERS = 50
-  const fd = [0.1, 0.1, 0.0005, 0.1, 0.1] // finite-diff deltas for [a, b, alpha, tx, ty]
-  let params = [a, b, alpha, tx, ty]
+  const fd = [0.1, 0.0005, 0.1, 0.1]
+  let params = [a, alpha, tx, ty]
 
   for (let iter = 0; iter < MAX_ITERS; iter++) {
-    const mse = computeMSE(inliers, ...params as [number, number, number, number, number])
+    const mse = computeMSE(inliers, ...params as [number, number, number, number])
 
-    const grad = [0, 0, 0, 0, 0]
-    for (let d = 0; d < 5; d++) {
+    const grad = [0, 0, 0, 0]
+    for (let d = 0; d < 4; d++) {
       const p1 = [...params]; p1[d] += fd[d]
       const p2 = [...params]; p2[d] -= fd[d]
-      grad[d] = (computeMSE(inliers, ...p1 as [number, number, number, number, number])
-               - computeMSE(inliers, ...p2 as [number, number, number, number, number])) / (2 * fd[d])
+      grad[d] = (computeMSE(inliers, ...p1 as [number, number, number, number])
+               - computeMSE(inliers, ...p2 as [number, number, number, number])) / (2 * fd[d])
     }
 
     // Line search with halving
@@ -542,7 +520,13 @@ export function fitGrid(
     let step = 4.0
     for (let s = 0; s < 15; s++) {
       const candidate = params.map((v, i) => v - step * grad[i])
-      const candidateMSE = computeMSE(inliers, ...candidate as [number, number, number, number, number])
+      // Clamp each param to its allowed range from initial
+      let clamped = false
+      for (let i = 0; i < 4; i++) {
+        if (Math.abs(candidate[i] - init[i]) > clampRange[i]) { clamped = true; break }
+      }
+      if (clamped) { step *= 0.5; continue }
+      const candidateMSE = computeMSE(inliers, ...candidate as [number, number, number, number])
       if (candidateMSE < mse) {
         params = candidate
         improved = true
@@ -553,17 +537,16 @@ export function fitGrid(
     if (!improved) break
   }
 
-  ;[a, b, alpha, tx, ty] = params
+  ;[a, alpha, tx, ty] = params
   const beta = alpha + basisAngle
 
-  return { a, alpha, b, beta, tx, ty }
+  return { a, alpha, b: a, beta, tx, ty }
 }
 
 /** Orchestrator: detect grid point candidates from a phase contrast image. */
 export function detectGridPoints(
   image: HTMLImageElement,
   radius: number = 5,
-  debug: boolean = false,
 ): Array<{ x: number; y: number }> {
   const canvas = document.createElement("canvas")
   canvas.width = image.width
@@ -577,39 +560,27 @@ export function detectGridPoints(
 
   // 1. Grayscale
   const gray = toGrayscale(imageData)
-  if (debug) debugDownload(gray, w, h, "debug_1_grayscale")
-
   // 2. Local variance
   const variance = localVariance(gray, w, h, radius)
-  if (debug) debugDownload(variance, w, h, "debug_2_variance")
 
   // 3. Log-variance → Otsu threshold → binary buffer
   const logVar = new Float32Array(w * h)
   for (let i = 0; i < logVar.length; i++) {
     logVar[i] = Math.log1p(variance[i])
   }
-  if (debug) debugDownload(logVar, w, h, "debug_2b_logvariance")
-
   const threshold = otsuThreshold(logVar)
   const binary = new Float64Array(w * h)
   for (let i = 0; i < binary.length; i++) {
     binary[i] = logVar[i] >= threshold ? 1 : 0
   }
-  if (debug) debugDownload(binary, w, h, "debug_3a_binary_raw")
-
   // 3b. Morphological open (remove noise specks) then close (fill gaps)
   const morphR = 2
   let cleaned = morphOpen(binary, w, h, morphR)
   cleaned = morphClose(cleaned, w, h, morphR)
-  if (debug) debugDownload(cleaned, w, h, "debug_3b_binary_morphed")
-
   // 3c. Fill interior holes
   cleaned = fillHoles(cleaned, w, h)
-  if (debug) debugDownload(cleaned, w, h, "debug_3c_binary_filled")
-
   // 4. Distance transform (in-place on cleaned → becomes DT values)
   distanceTransform(cleaned, w, h)
-  if (debug) debugDownload(cleaned, w, h, "debug_4_dt")
 
   // 5. Find peaks
   let maxDT = 0
