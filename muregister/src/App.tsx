@@ -85,6 +85,7 @@ function App() {
   const handleImageLoad = useCallback((img: HTMLImageElement, filename: string) => {
     const dataURL = imageToDataURL(img)
     loadImage(dataURL, filename, img.width, img.height)
+    clearDetectedPoints()
   }, [])
 
   const handleExportYAML = useCallback(() => {
