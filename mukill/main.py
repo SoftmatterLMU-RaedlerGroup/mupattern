@@ -106,14 +106,14 @@ def _load_annotations(csv_path: Path) -> dict[str, bool]:
 
 def _build_examples(
     zarr_path: Path,
-    pos: str,
+    pos: int,
     annotations: dict[str, bool],
 ) -> list[dict]:
     """Read crops from zarr and pair with annotations."""
     store = zarr.DirectoryStore(str(zarr_path))
     root = zarr.open_group(store, mode="r")
 
-    crop_grp = root[f"pos/{pos}/crop"]
+    crop_grp = root[f"pos/{pos:03d}/crop"]
     crop_ids = sorted(crop_grp.keys())
 
     examples = []
@@ -172,7 +172,7 @@ def dataset(
 
     for source in cfg["sources"]:
         zarr_path = Path(source["zarr"])
-        pos = str(source["pos"])
+        pos = int(source["pos"])
         ann_path = Path(source["annotations"])
 
         typer.echo(f"Loading pos {pos} from {zarr_path}")
@@ -341,7 +341,7 @@ def train(
 
 def _predict_position(
     zarr_path: Path,
-    pos: str,
+    pos: int,
     model,
     processor,
     device,
@@ -355,7 +355,7 @@ def _predict_position(
     store = zarr.DirectoryStore(str(zarr_path))
     root = zarr.open_group(store, mode="r")
 
-    crop_grp = root[f"pos/{pos}/crop"]
+    crop_grp = root[f"pos/{pos:03d}/crop"]
     crop_ids = sorted(crop_grp.keys())
 
     if crop_range is not None:
@@ -451,7 +451,7 @@ def predict(
 
     for source in cfg["sources"]:
         zarr_path = Path(source["zarr"])
-        pos = str(source["pos"])
+        pos = int(source["pos"])
 
         t_range = tuple(source["t_range"]) if "t_range" in source else None
         crop_range = tuple(source["crop_range"]) if "crop_range" in source else None

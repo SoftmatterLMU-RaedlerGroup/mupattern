@@ -34,6 +34,11 @@ ND2 ──► mufile convert ──► raw TIFFs ──► mupattern ──► b
                                                         │
                                                         ▼
                                                    mukill plot ──► kill curve plots
+
+                                              muexpression analyze ──► expression CSV
+                                                        │
+                                                        ▼
+                                                muexpression plot ──► expression plots
 ```
 
 ## Packages
@@ -44,6 +49,7 @@ ND2 ──► mufile convert ──► raw TIFFs ──► mupattern ──► b
 | `mufile/` | Python CLI | Microscopy file utilities: convert ND2 → TIFF, crop TIFFs → zarr |
 | `musee/` | React/Vite | Browse crops in the zarr store, annotate cell presence/absence |
 | `mukill/` | Python CLI | Build HuggingFace Dataset, train ResNet-18 classifier, run inference, enforce monotonicity, plot kill curves |
+| `muexpression/` | Python CLI | Measure fluorescence expression per crop over time, plot intensity curves |
 | `shared/` | React | Shared shadcn/ui components used by mupattern and musee |
 
 ## Prerequisites
@@ -157,7 +163,7 @@ Create a config YAML:
 # dataset.yaml
 sources:
   - zarr: /path/to/crops.zarr
-    pos: "150"
+    pos: 150
     annotations: /path/to/annotations.csv
 ```
 
@@ -206,7 +212,7 @@ Create a predict config YAML:
 # predict.yaml
 sources:
   - zarr: /path/to/crops.zarr
-    pos: "150"
+    pos: 150
     t_range: [0, 50]       # optional: only predict t=0..49
     crop_range: [0, 125]   # optional: only predict crops 0..124
 ```
@@ -261,7 +267,7 @@ Death times at `t=0` are excluded — a crop absent at `t=0` means no cell was e
 
 ### Pos150 — Killing 2D (MCF7 + CAR-T in suspension)
 
-![Kill curve Pos150 (cleaned)](data/plots/kill_curve_pos150_cleaned.png)
+![Kill curve Pos150 (cleaned)](examples/kill_pos150.png)
 
 - 125 crops analyzed over 50 timepoints
 - 72 empty at `t=0` (no cell present)
@@ -271,7 +277,7 @@ Death times at `t=0` are excluded — a crop absent at `t=0` means no cell was e
 
 ### Pos156 — Killing 3D (MCF7 + CAR-T in collagen gel)
 
-![Kill curve Pos156 (cleaned)](data/plots/kill_curve_pos156_cleaned.png)
+![Kill curve Pos156 (cleaned)](examples/kill_pos156.png)
 
 - 125 crops analyzed over 50 timepoints
 - 72 empty at `t=0`
@@ -281,7 +287,7 @@ Death times at `t=0` are excluded — a crop absent at `t=0` means no cell was e
 
 ### Pos140 — Control (MCF7 only, no T-cells)
 
-![Kill curve Pos140 (cleaned)](data/plots/kill_curve_pos140_cleaned.png)
+![Kill curve Pos140 (cleaned)](examples/kill_pos140.png)
 
 - 125 crops analyzed over 50 timepoints
 - 72 empty at `t=0`
@@ -289,18 +295,40 @@ Death times at `t=0` are excluded — a crop absent at `t=0` means no cell was e
 - 47 survived all 50 timepoints
 - False positive death rate: ~11% (6/53 cells that were actually present)
 
+### Expression — HuH7 Pos0
+
+![Expression Pos0](examples/expression_pos0.png)
+
+- 145 crops, 180 timepoints, channel 1 (fluorescence)
+- Left: raw summed intensity per crop; Right: background-subtracted
+
+### Expression — HuH7 Pos1
+
+![Expression Pos1](examples/expression_pos1.png)
+
+- 169 crops, 180 timepoints, channel 1 (fluorescence)
+- Left: raw summed intensity per crop; Right: background-subtracted
+
 ## Data files
 
 ```
-data/
-  pos140_bbox.csv           # Pos140 bounding boxes (339 crops, control — MCF7 only)
-  pos150_bbox.csv           # Pos150 bounding boxes (337 crops, killing 2D — MCF7 + CAR-T in suspension)
-  pos156_bbox.csv           # Pos156 bounding boxes (killing 3D — MCF7 + CAR-T in collagen gel)
-  pos150_annotation.csv     # manual annotations (420 labels, 28 crops, t=0..21)
-  plots/
-    kill_curve_pos150_cleaned.png   # killing 2D
-    kill_curve_pos156_cleaned.png   # killing 3D
-    kill_curve_pos140_cleaned.png   # control
+examples/
+  kill_pos140_bbox.csv              # Pos140 bounding boxes (control — MCF7 only)
+  kill_pos150_bbox.csv              # Pos150 bounding boxes (killing 2D — MCF7 + CAR-T in suspension)
+  kill_pos156_bbox.csv              # Pos156 bounding boxes (killing 3D — MCF7 + CAR-T in collagen gel)
+  kill_pos150_annotation.csv        # manual annotations (420 labels, 28 crops, t=0..21)
+  kill_pos140_config.yaml           # mukill predict config for Pos140
+  kill_pos150_config.yaml           # mukill predict config for Pos150
+  kill_pos156_config.yaml           # mukill predict config for Pos156
+  kill_pos140.png                   # kill curve — control
+  kill_pos150.png                   # kill curve — killing 2D
+  kill_pos156.png                   # kill curve — killing 3D
+  expression_pos0_bbox.csv          # Pos0 bounding boxes (HuH7)
+  expression_pos1_bbox.csv          # Pos1 bounding boxes (HuH7)
+  expression_pos0_config.yaml       # muexpression analyze config for Pos0
+  expression_pos1_config.yaml       # muexpression analyze config for Pos1
+  expression_pos0.png               # expression curves — Pos0
+  expression_pos1.png               # expression curves — Pos1
 ```
 
 Model weights are hosted on HuggingFace: [keejkrej/mupattern-resnet18](https://huggingface.co/keejkrej/mupattern-resnet18)
@@ -337,7 +365,7 @@ All tools use the same `t,crop,label` format. Labels are `true` (cell present) o
 ```yaml
 sources:
   - zarr: /path/to/crops.zarr
-    pos: "150"
+    pos: 150
     annotations: /path/to/annotations.csv
 ```
 
@@ -346,7 +374,7 @@ sources:
 ```yaml
 sources:
   - zarr: /path/to/crops.zarr
-    pos: "150"
+    pos: 150
     t_range: [0, 50]       # [start, end), optional
     crop_range: [0, 125]   # [start, end), optional
 ```
@@ -366,6 +394,7 @@ cd musee && bun run dev
 # Run Python CLIs (uv manages virtualenvs automatically)
 cd mufile && uv run mufile --help
 cd mukill && uv run mukill --help
+cd muexpression && uv run muexpression --help
 ```
 
 ## Tech stack
@@ -373,3 +402,4 @@ cd mukill && uv run mukill --help
 - **mupattern / musee**: React 18, TypeScript, Vite, Tailwind CSS 4, shadcn/ui, HTML5 Canvas, File System Access API
 - **mufile**: Python, typer, zarr v2, tifffile, numpy, nd2
 - **mukill**: Python, typer, transformers (HuggingFace), torch, zarr v2, datasets, evaluate, pandas, matplotlib
+- **muexpression**: Python, typer, zarr v2, numpy, pandas, matplotlib

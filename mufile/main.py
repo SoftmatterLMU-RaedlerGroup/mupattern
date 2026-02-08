@@ -63,6 +63,7 @@ def _crop_position(
     pos: int,
     bboxes: list[dict[str, int]],
     output: Path,
+    background: bool = False,
 ) -> None:
     """Crop every bbox across all frames and write into *output* zarr store."""
     index = _discover_tiffs(pos_dir)
@@ -95,12 +96,31 @@ def _crop_position(
         arr.attrs["bbox"] = bb
         arrays.append(arr)
 
+    bg_arr = None
+    if background:
+        mask = np.zeros(sample.shape, dtype=bool)
+        for bb in bboxes:
+            x, y, w, h = bb["x"], bb["y"], bb["w"], bb["h"]
+            mask[y : y + h, x : x + w] = True
+
+        bg_arr = root.zeros(
+            f"pos/{pos:03d}/background",
+            shape=(n_times, n_channels, n_z),
+            chunks=(1, 1, 1),
+            dtype=np.float64,
+            overwrite=True,
+        )
+        bg_arr.attrs["axis_names"] = ["t", "c", "z"]
+        bg_arr.attrs["description"] = "Median of pixels outside all crop bounding boxes"
+
     sorted_keys = sorted(index.keys())
     for c, t, z in track(sorted_keys, description="Reading frames"):
         frame = tifffile.imread(index[(c, t, z)])
         for crop_idx, bb in enumerate(bboxes):
             x, y, w, h = bb["x"], bb["y"], bb["w"], bb["h"]
             arrays[crop_idx][t, c, z] = frame[y : y + h, x : x + w]
+        if bg_arr is not None:
+            bg_arr[t, c, z] = float(np.median(frame[~mask]))
 
     typer.echo(f"Wrote {output}")
 
@@ -137,6 +157,10 @@ def crop(
         Path,
         typer.Option(help="Output zarr store path (e.g. crops.zarr)."),
     ],
+    background: Annotated[
+        bool,
+        typer.Option(help="Compute per-frame background (median outside crops)."),
+    ] = False,
 ) -> None:
     """Crop pattern positions from microscopy TIFFs into a zarr store."""
     pos_dir = input_dir / f"Pos{pos}"
@@ -147,7 +171,7 @@ def crop(
     bboxes = _read_bbox_csv(bbox)
     typer.echo(f"Loaded {len(bboxes)} bounding boxes from {bbox}")
 
-    _crop_position(pos_dir, pos, bboxes, output)
+    _crop_position(pos_dir, pos, bboxes, output, background=background)
 
 
 @app.command()
