@@ -102,7 +102,7 @@ function App() {
 
   const handleAutoDetect = useCallback((basisAngle: number) => {
     if (!phaseContrast) return
-    const points = detectGridPoints(phaseContrast, 5, true)
+    const points = detectGridPoints(phaseContrast, 5, false)
     setDetectedPoints(points)
 
     const fit = fitGrid(points, canvasSize.width, canvasSize.height, basisAngle)

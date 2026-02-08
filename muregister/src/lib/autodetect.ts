@@ -440,10 +440,8 @@ export function fitGrid(
     }
     nnVecs.push({ dx: bestDx, dy: bestDy, mag: Math.sqrt(bestDist) })
   }
-  const filteredVecs = nnVecs
-
   // 2. Normalize angles to [0, π) — treat opposite directions as same
-  const anglesAndMags = filteredVecs.map((v) => {
+  const anglesAndMags = nnVecs.map((v) => {
     let ang = Math.atan2(v.dy, v.dx)
     if (ang < 0) ang += Math.PI
     return { ang, mag: v.mag }
@@ -486,7 +484,7 @@ export function fitGrid(
     }
   }
 
-  if (bestBBinIdx < 0 || bestBCount === 0) return null
+  if (bestBBinIdx < 0 || bestBCount === 0 || bestBCount < bins[bestBinIdx].count * 0.2) return null
 
   const alphaB = bins[bestBBinIdx].sumAng / bins[bestBBinIdx].count
   const magB = bins[bestBBinIdx].sumMag / bins[bestBBinIdx].count
@@ -503,12 +501,7 @@ export function fitGrid(
   // 6. Estimate origin
   let { tx, ty } = medianOrigin(points, ax, ay, bx, by, det, cx, cy)
 
-  console.log(`[fitGrid] initial a=${a.toFixed(1)} alpha=${(alpha * 180 / Math.PI).toFixed(1)}° b=${b.toFixed(1)} tx=${tx.toFixed(1)} ty=${ty.toFixed(1)}`)
-
-  // 7. Refine by minimizing MSE (point to nearest lattice node)
-  // Parameters: [a, b, alpha, tx, ty], beta is locked to alpha + π/2
-
-  // MSE over a fixed point set
+  // 7. Drop top 10% outliers upfront
   function computeMSE(pts: Array<{ x: number; y: number }>, a: number, b: number, alpha: number, tx: number, ty: number): number {
     const ax = a * Math.cos(alpha), ay = a * Math.sin(alpha)
     const bx = b * Math.cos(alpha + basisAngle), by = b * Math.sin(alpha + basisAngle)
@@ -521,58 +514,47 @@ export function fitGrid(
     return sum / pts.length
   }
 
-  // Iterative refinement: each step drops worst 10% then takes a gradient step
-  const MAX_ITERS = 20
-  const h = [0.5, 0.5, 0.001, 0.5, 0.5] // finite-diff deltas for [a, b, alpha, tx, ty]
-  const lr = [1.0, 1.0, 0.0001, 1.0, 1.0] // learning rates
+  const withRes = points.map((p) => ({
+    p,
+    r: latticeResidual2(p.x - tx, p.y - ty, ax, ay, bx, by, det, cx, cy),
+  }))
+  withRes.sort((a, b) => a.r - b.r)
+  const inliers = withRes.slice(0, Math.ceil(points.length * 0.9)).map((v) => v.p)
+
+  // 8. Gradient descent on inliers
+  const MAX_ITERS = 50
+  const fd = [0.1, 0.1, 0.0005, 0.1, 0.1] // finite-diff deltas for [a, b, alpha, tx, ty]
   let params = [a, b, alpha, tx, ty]
-  let inliers: Array<{ x: number; y: number }> = points
-  const minPoints = Math.max(3, Math.ceil(points.length * 0.5)) // keep at least 50%
 
   for (let iter = 0; iter < MAX_ITERS; iter++) {
-    // Drop worst 10% of remaining points
-    if (inliers.length > minPoints) {
-      const [ca, cb, calpha, ctx, cty] = params
-      const cax = ca * Math.cos(calpha), cay = ca * Math.sin(calpha)
-      const cbx = cb * Math.cos(calpha + basisAngle), cby = cb * Math.sin(calpha + basisAngle)
-      const cdet = cax * cby - cbx * cay
-      if (Math.abs(cdet) < 1e-9) break
-      const withRes = inliers.map((p) => ({
-        p,
-        r: latticeResidual2(p.x - ctx, p.y - cty, cax, cay, cbx, cby, cdet, cx, cy),
-      }))
-      withRes.sort((a, b) => a.r - b.r)
-      inliers = withRes.slice(0, Math.max(minPoints, Math.ceil(withRes.length * 0.9))).map((v) => v.p)
-    }
-
-    // One gradient step
     const mse = computeMSE(inliers, ...params as [number, number, number, number, number])
 
     const grad = [0, 0, 0, 0, 0]
     for (let d = 0; d < 5; d++) {
-      const p1 = [...params]; p1[d] += h[d]
-      const p2 = [...params]; p2[d] -= h[d]
+      const p1 = [...params]; p1[d] += fd[d]
+      const p2 = [...params]; p2[d] -= fd[d]
       grad[d] = (computeMSE(inliers, ...p1 as [number, number, number, number, number])
-               - computeMSE(inliers, ...p2 as [number, number, number, number, number])) / (2 * h[d])
+               - computeMSE(inliers, ...p2 as [number, number, number, number, number])) / (2 * fd[d])
     }
 
-    let step = 1.0
-    for (let s = 0; s < 10; s++) {
-      const candidate = params.map((v, i) => v - step * lr[i] * grad[i])
+    // Line search with halving
+    let improved = false
+    let step = 4.0
+    for (let s = 0; s < 15; s++) {
+      const candidate = params.map((v, i) => v - step * grad[i])
       const candidateMSE = computeMSE(inliers, ...candidate as [number, number, number, number, number])
       if (candidateMSE < mse) {
         params = candidate
+        improved = true
         break
       }
       step *= 0.5
     }
+    if (!improved) break
   }
 
   ;[a, b, alpha, tx, ty] = params
   const beta = alpha + basisAngle
-  const finalMSE = computeMSE(inliers, a, b, alpha, tx, ty)
-
-  console.log(`[fitGrid] refined a=${a.toFixed(1)} alpha=${(alpha * 180 / Math.PI).toFixed(1)}° b=${b.toFixed(1)} tx=${tx.toFixed(1)} ty=${ty.toFixed(1)} mse=${finalMSE.toFixed(2)} inliers=${inliers.length}/${points.length}`)
 
   return { a, alpha, b, beta, tx, ty }
 }
@@ -609,7 +591,6 @@ export function detectGridPoints(
   if (debug) debugDownload(logVar, w, h, "debug_2b_logvariance")
 
   const threshold = otsuThreshold(logVar)
-  console.log("[autodetect] otsu threshold (log-space):", threshold)
   const binary = new Float64Array(w * h)
   for (let i = 0; i < binary.length; i++) {
     binary[i] = logVar[i] >= threshold ? 1 : 0
@@ -636,27 +617,21 @@ export function detectGridPoints(
     if (cleaned[i] > maxDT) maxDT = cleaned[i]
   }
   const minVal = Math.max(3, maxDT * 0.1)
-  console.log("[autodetect] maxDT:", maxDT, "minVal:", minVal)
-
   const rawPeaks = findPeaks(cleaned, w, h, minVal)
 
-  // 6. Iteratively drop smallest DT peak until CV < 20% of median
-  let peaks = rawPeaks
-  while (peaks.length > 3) {
-    const vals = peaks.map((p) => cleaned[p.y * w + p.x])
-    const mean = vals.reduce((s, v) => s + v, 0) / vals.length
-    const variance = vals.reduce((s, v) => s + (v - mean) ** 2, 0) / vals.length
+  // 6. Filter artifact peaks: sort by DT ascending, advance start until CV < 0.2 (max 30% dropped)
+  const peaksWithDT = rawPeaks.map((p) => ({ ...p, dt: cleaned[p.y * w + p.x] }))
+  peaksWithDT.sort((a, b) => a.dt - b.dt)
+  const maxDrop = Math.floor(peaksWithDT.length * 0.3)
+  let startIdx = 0
+  for (let i = 0; i < maxDrop && peaksWithDT.length - i > 3; i++) {
+    const slice = peaksWithDT.slice(i)
+    const mean = slice.reduce((s, p) => s + p.dt, 0) / slice.length
+    const variance = slice.reduce((s, p) => s + (p.dt - mean) ** 2, 0) / slice.length
     const cv = Math.sqrt(variance) / mean
     if (cv < 0.2) break
-    // Drop the peak with smallest DT value
-    let minIdx = 0
-    for (let i = 1; i < vals.length; i++) {
-      if (vals[i] < vals[minIdx]) minIdx = i
-    }
-    peaks = peaks.filter((_, i) => i !== minIdx)
+    startIdx = i + 1
   }
 
-  console.log("[autodetect] found", rawPeaks.length, "raw peaks, kept", peaks.length, "after DT filter")
-
-  return peaks
+  return peaksWithDT.slice(startIdx).map(({ x, y }) => ({ x, y }))
 }
