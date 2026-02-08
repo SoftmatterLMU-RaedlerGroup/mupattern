@@ -5,6 +5,7 @@ export interface ViewerState {
   annotations: [string, boolean][]
   selectedPos: string
   t: number
+  c: number
   page: number
   contrastMin: number
   contrastMax: number
@@ -17,6 +18,7 @@ const defaultState: ViewerState = {
   annotations: [],
   selectedPos: "",
   t: 0,
+  c: 0,
   page: 0,
   contrastMin: 0,
   contrastMax: 65535,
@@ -40,11 +42,15 @@ export function setAnnotations(annotations: Map<string, boolean>) {
 }
 
 export function setSelectedPos(selectedPos: string) {
-  viewerStore.setState((s) => ({ ...s, selectedPos, t: 0, page: 0 }))
+  viewerStore.setState((s) => ({ ...s, selectedPos, page: 0 }))
 }
 
 export function setT(t: number) {
   viewerStore.setState((s) => ({ ...s, t }))
+}
+
+export function setC(c: number) {
+  viewerStore.setState((s) => ({ ...s, c }))
 }
 
 export function setPage(page: number) {
