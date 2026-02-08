@@ -16,6 +16,7 @@ import {
   setAnnotations as persistAnnotations,
   setSelectedPos as persistSelectedPos,
   setT as persistT,
+  setC as persistC,
   setPage as persistPage,
   setContrast as persistContrast,
   setAnnotating as persistAnnotating,
@@ -53,6 +54,7 @@ export function Viewer({ store, index }: ViewerProps) {
   // Persisted state from store
   const selectedPos = useStore(viewerStore, (s) => s.selectedPos);
   const t = useStore(viewerStore, (s) => s.t);
+  const c = useStore(viewerStore, (s) => s.c);
   const page = useStore(viewerStore, (s) => s.page);
   const contrastMin = useStore(viewerStore, (s) => s.contrastMin);
   const contrastMax = useStore(viewerStore, (s) => s.contrastMax);
@@ -89,6 +91,7 @@ export function Viewer({ store, index }: ViewerProps) {
 
   const crops: CropInfo[] = index.crops.get(validPos) ?? [];
   const maxT = crops.length > 0 ? crops[0].shape[0] - 1 : 0;
+  const numChannels = crops.length > 0 ? crops[0].shape[1] : 1;
   const totalPages = Math.ceil(crops.length / PAGE_SIZE);
   const clampedT = Math.min(t, maxT);
   const clampedPage = Math.min(page, Math.max(0, totalPages - 1));
@@ -139,7 +142,7 @@ export function Viewer({ store, index }: ViewerProps) {
     async function loadPage() {
       const frames = await Promise.all(
         pageCrops.map((crop) =>
-          loadFrame(store, crop.posId, crop.cropId, clampedT).catch(() => null)
+          loadFrame(store, crop.posId, crop.cropId, clampedT, c).catch(() => null)
         )
       );
 
@@ -185,7 +188,7 @@ export function Viewer({ store, index }: ViewerProps) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store, validPos, clampedT, clampedPage, contrastMin, contrastMax, autoContrastDone]);
+  }, [store, validPos, clampedT, c, clampedPage, contrastMin, contrastMax, autoContrastDone]);
 
   const setCanvasRef = useCallback(
     (cropId: string) => (el: HTMLCanvasElement | null) => {
@@ -204,6 +207,11 @@ export function Viewer({ store, index }: ViewerProps) {
 
   const handleChangePos = useCallback((posId: string) => {
     persistSelectedPos(posId);
+    setAutoContrastDone(false);
+  }, []);
+
+  const handleChangeChannel = useCallback((ch: number) => {
+    persistC(ch);
     setAutoContrastDone(false);
   }, []);
 
@@ -287,6 +295,17 @@ export function Viewer({ store, index }: ViewerProps) {
               ))}
             </select>
           )}
+          <select
+            value={c}
+            onChange={(e) => handleChangeChannel(Number(e.target.value))}
+            className="bg-secondary text-secondary-foreground rounded px-2 py-1 text-sm"
+          >
+            {Array.from({ length: numChannels }, (_, i) => (
+              <option key={i} value={i}>
+                Ch {i}
+              </option>
+            ))}
+          </select>
           <span className="text-sm text-muted-foreground">
             {crops.length} crops
           </span>
