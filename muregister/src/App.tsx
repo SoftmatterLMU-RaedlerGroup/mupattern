@@ -21,6 +21,7 @@ import {
   setSensitivity,
   resetPatternAndTransform,
   setDetectedPoints,
+  clearDetectedPoints,
 } from "@/store"
 import { detectGridPoints, fitGrid } from "@/lib/autodetect"
 import { pixelsToUm } from "@/lib/units"
@@ -100,12 +101,15 @@ function App() {
     canvasRef.current?.exportAll()
   }, [])
 
-  const handleAutoDetect = useCallback((basisAngle: number) => {
+  const handleDetect = useCallback(() => {
     if (!phaseContrast) return
     const points = detectGridPoints(phaseContrast, 5)
     setDetectedPoints(points)
+  }, [phaseContrast])
 
-    const fit = fitGrid(points, canvasSize.width, canvasSize.height, basisAngle)
+  const handleFitGrid = useCallback((basisAngle: number) => {
+    if (!detectedPoints || detectedPoints.length < 3) return
+    const fit = fitGrid(detectedPoints, canvasSize.width, canvasSize.height, basisAngle)
     if (fit) {
       updateLattice({
         a: pixelsToUm(fit.a, calibration),
@@ -115,7 +119,12 @@ function App() {
       })
       updateTransform({ tx: fit.tx, ty: fit.ty })
     }
-  }, [phaseContrast, canvasSize, calibration])
+  }, [detectedPoints, canvasSize, calibration])
+
+  const handleReset = useCallback(() => {
+    resetPatternAndTransform()
+    clearDetectedPoints()
+  }, [])
 
   if (!started) {
     return <Landing onStart={handleStart} />
@@ -155,10 +164,12 @@ function App() {
           onTransformUpdate={updateTransform}
           sensitivity={sensitivity}
           onSensitivityChange={setSensitivity}
-          onReset={resetPatternAndTransform}
+          onReset={handleReset}
           onExport={handleExport}
           hasImage={!!phaseContrast}
-          onAutoDetect={handleAutoDetect}
+          hasDetectedPoints={!!detectedPoints && detectedPoints.length > 0}
+          onDetect={handleDetect}
+          onFitGrid={handleFitGrid}
         />
       </div>
     </div>
