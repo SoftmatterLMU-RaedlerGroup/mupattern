@@ -126,6 +126,59 @@ def _crop_position(
 
 
 # ---------------------------------------------------------------------------
+# Helpers (convert)
+# ---------------------------------------------------------------------------
+
+
+def parse_slice_string(s: str, length: int) -> list[int]:
+    """Parse a human-friendly slice string into a sorted list of unique indices.
+
+    Accepts ``"all"`` or a comma-separated mix of single integers and Python-style
+    slices (``start:stop`` or ``start:stop:step``).  Negative indices are resolved
+    relative to *length* using normal Python semantics.
+
+    Examples::
+
+        >>> parse_slice_string("all", 10)
+        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+        >>> parse_slice_string("0:5, 10, 20:30:2", 50)
+        [0, 1, 2, 3, 4, 10, 20, 22, 24, 26, 28]
+        >>> parse_slice_string("-3:", 10)
+        [7, 8, 9]
+
+    Raises :class:`typer.BadParameter` on invalid input.
+    """
+    if s.strip().lower() == "all":
+        return list(range(length))
+
+    indices: set[int] = set()
+    for segment in s.split(","):
+        segment = segment.strip()
+        if not segment:
+            continue
+        try:
+            if ":" in segment:
+                parts = [(int(p) if p else None) for p in segment.split(":")]
+                if len(parts) == 3 and parts[2] == 0:
+                    raise typer.BadParameter(f"Slice step cannot be zero: {segment!r}")
+                indices.update(range(*slice(*parts).indices(length)))
+            else:
+                idx = int(segment)
+                if idx < -length or idx >= length:
+                    raise typer.BadParameter(
+                        f"Index {idx} out of range for length {length}"
+                    )
+                indices.add(idx % length)
+        except ValueError:
+            raise typer.BadParameter(f"Invalid slice segment: {segment!r}")
+
+    if not indices:
+        raise typer.BadParameter(f"Slice string {s!r} produced no indices")
+
+    return sorted(indices)
+
+
+# ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------
 
@@ -160,7 +213,7 @@ def crop(
     background: Annotated[
         bool,
         typer.Option(help="Compute per-frame background (median outside crops)."),
-    ] = False,
+    ],
 ) -> None:
     """Crop pattern positions from microscopy TIFFs into a zarr store."""
     pos_dir = input_dir / f"Pos{pos}"
@@ -184,10 +237,22 @@ def convert(
             help="Path to the .nd2 file to convert.",
         ),
     ],
+    pos: Annotated[
+        str,
+        typer.Option(
+            help='Positions to convert: "all" or comma-separated indices/slices, e.g. "0:5, 10".',
+        ),
+    ],
+    time: Annotated[
+        str,
+        typer.Option(
+            help='Timepoints to convert: "all" or comma-separated indices/slices, e.g. "0:50, 100".',
+        ),
+    ],
     output: Annotated[
         Path,
         typer.Option(help="Output directory (will contain Pos*/... TIFF folders)."),
-    ] = None,
+    ],
 ) -> None:
     """Convert an ND2 file into per-position TIFF folders.
 
@@ -195,14 +260,12 @@ def convert(
 
         output/
           Pos140/
+            time_map.csv
             img_channel000_position140_time000000000_z000.tif
           Pos150/
             ...
     """
     import nd2
-
-    if output is None:
-        output = nd2_file.parent / nd2_file.stem
 
     f = nd2.ND2File(str(nd2_file))
     sizes = f.sizes
@@ -238,33 +301,62 @@ def convert(
         m = re.search(r"(\d+)", name)
         return int(m.group(1)) if m else 0
 
-    total = n_pos * n_time * n_chan * n_z
+    # Resolve slice strings into concrete index lists
+    pos_indices = parse_slice_string(pos, n_pos)
+    time_indices = parse_slice_string(time, n_time)
+
+    total = len(pos_indices) * len(time_indices) * n_chan * n_z
+
+    typer.echo(f"ND2: {n_pos} positions, T={n_time}, C={n_chan}, Z={n_z}")
+    typer.echo("")
     typer.echo(
-        f"ND2: {n_pos} positions, T={n_time}, C={n_chan}, Z={n_z} "
-        f"({total} frames total)"
+        f"Selected {len(pos_indices)}/{n_pos} positions, "
+        f"{len(time_indices)}/{n_time} timepoints, "
+        f"{n_chan} channels, {n_z} z-slices"
     )
-    typer.echo(f"Positions: {', '.join(pos_names)}")
+    typer.echo(f"Total frames to write: {total}")
+    typer.echo("")
+
+    typer.echo("Positions:")
+    typer.echo(f"  {', '.join(pos_names[i] for i in pos_indices)}")
+    typer.echo("")
+
+    typer.echo("Timepoints (original indices):")
+    typer.echo(f"  {time_indices}")
+    typer.echo("")
+
+    typer.echo("")
+
+    if not typer.confirm("Proceed with conversion?"):
+        raise typer.Abort()
 
     output.mkdir(parents=True, exist_ok=True)
 
     with typer.progressbar(length=total, label="Writing TIFFs") as progress:
-        for p_idx in range(n_pos):
+        for p_idx in pos_indices:
             pos_name = pos_names[p_idx]
             pos_num = _pos_number(pos_name)
             pos_dir = output / pos_name
             pos_dir.mkdir(exist_ok=True)
 
-            for t in range(n_time):
+            # Write time mapping CSV so downstream tools know the remapping
+            with open(pos_dir / "time_map.csv", "w", newline="") as fh:
+                writer = csv.writer(fh)
+                writer.writerow(["t", "t_real"])
+                for t_new, t_orig in enumerate(time_indices):
+                    writer.writerow([t_new, t_orig])
+
+            for t_new, t_orig in enumerate(time_indices):
                 for c in range(n_chan):
                     for z in range(n_z):
-                        coords = {"P": p_idx, "T": t, "C": c, "Z": z}
+                        coords = {"P": p_idx, "T": t_orig, "C": c, "Z": z}
                         idx = tuple(coords.get(d, 0) for d in dim_order)
                         frame = dask_arr[idx].compute()
 
                         fname = (
                             f"img_channel{c:03d}"
                             f"_position{pos_num:03d}"
-                            f"_time{t:09d}"
+                            f"_time{t_new:09d}"
                             f"_z{z:03d}.tif"
                         )
                         tifffile.imwrite(str(pos_dir / fname), frame)
