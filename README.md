@@ -91,10 +91,23 @@ If your raw data is in Nikon ND2 format, convert it to per-position TIFF folders
 
 ```bash
 cd mufile
-uv run mufile convert /path/to/data.nd2 --output /path/to/data
+uv run mufile convert /path/to/data.nd2 --pos all --time all --output /path/to/data
 ```
 
-This reads the ND2 and writes one `Pos{N}/` folder per position, with TIFFs named `img_channel{C}_position{N}_time{T}_z{Z}.tif`. If `--output` is omitted, TIFFs are written next to the ND2 file in a folder with the same stem.
+`--pos` and `--time` are required and accept `"all"` or a comma-separated mix of indices and Python-style slices:
+
+```bash
+# Convert only positions 0-2 and timepoints 0-49
+uv run mufile convert /path/to/data.nd2 --pos "0:3" --time "0:50"
+
+# Cherry-pick positions and timepoints
+uv run mufile convert /path/to/data.nd2 --pos "0, 3, 5" --time "0:10, 50, -5:"
+
+# Negative indices and steps work too
+uv run mufile convert /path/to/data.nd2 --pos "-1" --time "0:100:2"
+```
+
+Before writing, the command prints the full list of selected positions and timepoints and asks for confirmation. TIFF filenames use contiguous 0-based time indices (so `crop` works unchanged); each `Pos{N}/` folder gets a `time_map.csv` mapping the TIFF time index back to the original ND2 timepoint.
 
 ### 2b. Crop into zarr (mufile crop)
 

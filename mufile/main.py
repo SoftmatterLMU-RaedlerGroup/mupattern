@@ -213,7 +213,7 @@ def crop(
     background: Annotated[
         bool,
         typer.Option(help="Compute per-frame background (median outside crops)."),
-    ] = False,
+    ],
 ) -> None:
     """Crop pattern positions from microscopy TIFFs into a zarr store."""
     pos_dir = input_dir / f"Pos{pos}"
@@ -252,7 +252,7 @@ def convert(
     output: Annotated[
         Path,
         typer.Option(help="Output directory (will contain Pos*/... TIFF folders)."),
-    ] = None,
+    ],
 ) -> None:
     """Convert an ND2 file into per-position TIFF folders.
 
@@ -266,9 +266,6 @@ def convert(
             ...
     """
     import nd2
-
-    if output is None:
-        output = nd2_file.parent / nd2_file.stem
 
     f = nd2.ND2File(str(nd2_file))
     sizes = f.sizes
