@@ -119,13 +119,15 @@ uv run mufile crop \
   --input /path/to/data \
   --pos 150 \
   --bbox /path/to/bbox.csv \
-  --output /path/to/crops.zarr
+  --output /path/to/crops.zarr \
+  --no-background
 ```
 
 - `--input` is the **parent** directory containing `Pos{N}/` subdirectories
 - `--pos` is the position number (e.g. `150` reads from `Pos150/`)
 - `--bbox` is the CSV exported by mupattern
 - `--output` is the zarr store path (created if it doesn't exist, appended if it does)
+- `--background` / `--no-background` — whether to compute per-frame background (median of pixels outside all crop bounding boxes), stored in the zarr store
 
 Output layout:
 
