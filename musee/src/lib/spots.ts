@@ -14,11 +14,11 @@ export interface Spot {
 
 export type SpotMap = Map<string, Spot[]>;
 
-export function spotKey(t: number, cropId: string): string {
-  return `${t}:${cropId}`;
+export function spotKey(pos: string, t: number, cropId: string): string {
+  return `${pos}:${t}:${cropId}`;
 }
 
-export function fromCSV(csv: string): SpotMap {
+export function fromCSV(csv: string, pos: string): SpotMap {
   const map: SpotMap = new Map();
   const lines = csv.trim().split("\n");
   // skip header
@@ -26,7 +26,7 @@ export function fromCSV(csv: string): SpotMap {
     const parts = lines[i].split(",");
     if (parts.length < 5) continue;
     const [tStr, cropId, , yStr, xStr] = parts;
-    const key = spotKey(parseInt(tStr, 10), cropId);
+    const key = spotKey(pos, parseInt(tStr, 10), cropId);
     const list = map.get(key) ?? [];
     list.push({ y: parseFloat(yStr), x: parseFloat(xStr) });
     map.set(key, list);
@@ -34,7 +34,7 @@ export function fromCSV(csv: string): SpotMap {
   return map;
 }
 
-export function uploadSpotCSV(): Promise<SpotMap> {
+export function uploadSpotCSV(pos: string): Promise<SpotMap> {
   return new Promise((resolve, reject) => {
     const input = document.createElement("input");
     input.type = "file";
@@ -43,7 +43,7 @@ export function uploadSpotCSV(): Promise<SpotMap> {
       const file = input.files?.[0];
       if (!file) return reject(new Error("No file selected"));
       const text = await file.text();
-      resolve(fromCSV(text));
+      resolve(fromCSV(text, pos));
     };
     input.click();
   });

@@ -202,7 +202,7 @@ export function Viewer({ store, index }: ViewerProps) {
         );
         // Overlay spots
         if (showSpots) {
-          const key = spotKey(clampedT, pageCrops[i].cropId);
+          const key = spotKey(validPos, clampedT, pageCrops[i].cropId);
           const cropSpots = spots.get(key);
           if (cropSpots) drawSpots(canvas, cropSpots);
         }
@@ -244,7 +244,7 @@ export function Viewer({ store, index }: ViewerProps) {
   // Annotation handler: click cycles true → false → remove
   const handleAnnotate = useCallback(
     (cropId: string) => {
-      const key = annotationKey(clampedT, cropId);
+      const key = annotationKey(validPos, clampedT, cropId);
       const current = annotations.get(key);
       const next = new Map(annotations);
       if (current === undefined) {
@@ -256,45 +256,51 @@ export function Viewer({ store, index }: ViewerProps) {
       }
       setAnnotations(next);
     },
-    [clampedT, annotations, setAnnotations]
+    [validPos, clampedT, annotations, setAnnotations]
   );
 
   const handleSave = useCallback(() => {
-    downloadCSV(annotations, `annotations_pos${validPos}.csv`);
+    downloadCSV(annotations, validPos, `annotations_pos${validPos}.csv`);
   }, [annotations, validPos]);
 
   const handleLoad = useCallback(async () => {
     try {
-      const loaded = await uploadCSV();
-      setAnnotations(loaded);
+      const loaded = await uploadCSV(validPos);
+      // Merge with existing annotations (preserving other positions)
+      const merged = new Map(annotations);
+      for (const [k, v] of loaded) merged.set(k, v);
+      setAnnotations(merged);
     } catch {
       // user cancelled
     }
-  }, [setAnnotations]);
+  }, [validPos, annotations, setAnnotations]);
 
   const handleLoadSpots = useCallback(async () => {
     try {
-      const loaded = await uploadSpotCSV();
-      setSpots(loaded);
+      const loaded = await uploadSpotCSV(validPos);
+      // Merge with existing spots (preserving other positions)
+      const merged = new Map(spots);
+      for (const [k, v] of loaded) merged.set(k, v);
+      setSpots(merged);
     } catch {
       // user cancelled
     }
-  }, [setSpots]);
+  }, [validPos, spots, setSpots]);
 
-  // Build set of cropIds that have any annotation (at any timepoint)
+  // Build set of cropIds that have any annotation (at any timepoint) for current position
   const annotatedCrops = useMemo(() => {
     const s = new Set<string>();
     for (const [key] of annotations) {
-      const { cropId } = parseKey(key);
-      s.add(cropId);
+      const { pos, cropId } = parseKey(key);
+      if (pos === validPos) s.add(cropId);
     }
     return s;
-  }, [annotations]);
+  }, [annotations, validPos]);
 
   // Border color for annotation state (only when visible)
   function borderClass(cropId: string): string {
     if (!showAnnotations) return "";
-    const key = annotationKey(clampedT, cropId);
+    const key = annotationKey(validPos, clampedT, cropId);
     const label = annotations.get(key);
     if (label === true) return "ring-2 ring-blue-500";
     if (label === false) return "ring-2 ring-red-500";
@@ -306,11 +312,11 @@ export function Viewer({ store, index }: ViewerProps) {
   const spotCount = useMemo(() => {
     let count = 0;
     for (const [key, list] of spots) {
-      const [tStr] = key.split(":");
-      if (parseInt(tStr, 10) === clampedT) count += list.length;
+      const [pos, tStr] = key.split(":");
+      if (pos === validPos && parseInt(tStr, 10) === clampedT) count += list.length;
     }
     return count;
-  }, [spots, clampedT]);
+  }, [spots, validPos, clampedT]);
 
   return (
     <div className="flex flex-col h-screen">
