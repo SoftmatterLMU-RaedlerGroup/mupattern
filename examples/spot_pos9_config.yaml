@@ -1,0 +1,4 @@
+sources:
+  - zarr: /path/to/crops.zarr
+    pos: 9
+    channel: 2
