@@ -1,7 +1,7 @@
 """muexpression – measure fluorescence expression in micropattern crops.
 
 Commands:
-    muexpression analyze --config config.yaml --output expression.csv
+    muexpression analyze --zarr crops.zarr --pos 0 --channel 1 --output expression.csv
     muexpression plot --input expression.csv --output expression.png
 """
 
@@ -14,7 +14,6 @@ import matplotlib
 import numpy as np
 import pandas as pd
 import typer
-import yaml
 import zarr
 from rich.progress import track
 
@@ -29,13 +28,17 @@ app = typer.Typer(
 
 @app.command()
 def analyze(
-    config: Annotated[
+    zarr_path: Annotated[
         Path,
-        typer.Option(
-            exists=True,
-            dir_okay=False,
-            help="YAML config listing zarr sources with pos and channel.",
-        ),
+        typer.Option("--zarr", help="Path to zarr store."),
+    ],
+    pos: Annotated[
+        int,
+        typer.Option(help="Position number."),
+    ],
+    channel: Annotated[
+        int,
+        typer.Option(help="Channel number."),
     ],
     output: Annotated[
         Path,
@@ -43,33 +46,25 @@ def analyze(
     ],
 ) -> None:
     """Sum pixel intensities per crop per timepoint and write a CSV."""
-    with open(config) as f:
-        cfg = yaml.safe_load(f)
-
     rows: list[tuple[int, str, int, float]] = []
 
-    for source in cfg["sources"]:
-        zarr_path = Path(source["zarr"])
-        pos = int(source["pos"])
-        channel = int(source["channel"])
+    typer.echo(f"Processing pos {pos:03d}, channel {channel} from {zarr_path}")
 
-        typer.echo(f"Processing pos {pos:03d}, channel {channel} from {zarr_path}")
+    store = zarr.DirectoryStore(str(zarr_path))
+    root = zarr.open_group(store, mode="r")
+    crop_grp = root[f"pos/{pos:03d}/crop"]
+    crop_ids = sorted(crop_grp.keys())
 
-        store = zarr.DirectoryStore(str(zarr_path))
-        root = zarr.open_group(store, mode="r")
-        crop_grp = root[f"pos/{pos:03d}/crop"]
-        crop_ids = sorted(crop_grp.keys())
+    bg_arr = root[f"pos/{pos:03d}/background"]
 
-        bg_arr = root[f"pos/{pos:03d}/background"]
+    for crop_id in track(crop_ids, description=f"  Pos {pos:03d}"):
+        arr = crop_grp[crop_id]
+        n_times = arr.shape[0]
 
-        for crop_id in track(crop_ids, description=f"  Pos {pos:03d}"):
-            arr = crop_grp[crop_id]
-            n_times = arr.shape[0]
-
-            for t in range(n_times):
-                intensity = int(np.array(arr[t, channel, 0]).sum())
-                background = float(bg_arr[t, channel, 0])
-                rows.append((t, crop_id, intensity, background))
+        for t in range(n_times):
+            intensity = int(np.array(arr[t, channel, 0]).sum())
+            background = float(bg_arr[t, channel, 0])
+            rows.append((t, crop_id, intensity, background))
 
     output.parent.mkdir(parents=True, exist_ok=True)
     with open(output, "w", newline="") as fh:

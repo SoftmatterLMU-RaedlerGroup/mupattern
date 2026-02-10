@@ -4,6 +4,7 @@ Commands:
 
 * ``mufile crop``    — crop micropattern positions from TIFFs into zarr stacks.
 * ``mufile convert`` — convert an ND2 file into per-position TIFF folders.
+* ``mufile movie``   — create a movie from a zarr crop.
 """
 
 from __future__ import annotations
@@ -11,7 +12,7 @@ from __future__ import annotations
 import csv
 import re
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 import numpy as np
 import tifffile
@@ -20,6 +21,17 @@ import zarr
 from rich.progress import track
 
 app = typer.Typer(add_completion=False)
+
+
+def _draw_marker(
+    frame: np.ndarray, y: int, x: int, h: int, w: int, size: int = 1
+) -> None:
+    """Draw a white diagonal cross (X) at (y, x), overwriting pixels."""
+    white = 255 if len(frame.shape) == 2 else np.array([255, 255, 255], dtype=np.uint8)
+    for d in range(-size, size + 1):
+        for yy, xx in [(y + d, x + d), (y + d, x - d)]:
+            if 0 <= yy < h and 0 <= xx < w:
+                frame[yy, xx] = white
 
 
 # ---------------------------------------------------------------------------
@@ -229,9 +241,10 @@ def crop(
 
 @app.command()
 def convert(
-    nd2_file: Annotated[
+    input: Annotated[
         Path,
-        typer.Argument(
+        typer.Option(
+            "--input",
             exists=True,
             dir_okay=False,
             help="Path to the .nd2 file to convert.",
@@ -267,7 +280,7 @@ def convert(
     """
     import nd2
 
-    f = nd2.ND2File(str(nd2_file))
+    f = nd2.ND2File(str(input))
     sizes = f.sizes
     n_pos = sizes.get("P", 1)
     n_time = sizes.get("T", 1)
@@ -364,6 +377,198 @@ def convert(
 
     f.close()
     typer.echo(f"Wrote {output}")
+
+
+@app.command()
+def movie(
+    input: Annotated[
+        Path,
+        typer.Option(
+            "--input",
+            exists=True,
+            file_okay=False,
+            help="Path to zarr store.",
+        ),
+    ],
+    pos: Annotated[
+        int,
+        typer.Option(help="Position number."),
+    ],
+    crop: Annotated[
+        int,
+        typer.Option(help="Crop number."),
+    ],
+    channel: Annotated[
+        int,
+        typer.Option(help="Channel number."),
+    ],
+    time: Annotated[
+        str,
+        typer.Option(
+            help='Timepoints to include: "all" or comma-separated indices/slices, e.g. "1:10:2, 3, 6".',
+        ),
+    ],
+    output: Annotated[
+        Path,
+        typer.Option(help="Output movie file path (e.g. movie.mp4)."),
+    ],
+    fps: Annotated[
+        int,
+        typer.Option(help="Frames per second."),
+    ],
+    colormap: Annotated[
+        Literal["grayscale", "hot", "viridis"],
+        typer.Option(
+            help='Colormap to apply: "grayscale", "hot", or "viridis".',
+        ),
+    ],
+    spots: Annotated[
+        Path | None,
+        typer.Option(
+            "--spots",
+            exists=True,
+            dir_okay=False,
+            help="Optional spots CSV (t,crop,spot,y,x) from muspot detect to overlay. Frames/crops not in CSV skip overlay.",
+        ),
+    ] = None,
+) -> None:
+    """Create a movie from a zarr crop."""
+    import imageio
+    import matplotlib.cm as cm
+
+    typer.echo(f"Loading crop {crop:03d} from pos {pos:03d} in {input}")
+
+    store = zarr.DirectoryStore(str(input))
+    root = zarr.open_group(store, mode="r")
+    crop_grp = root[f"pos/{pos:03d}/crop"]
+    crop_id = f"{crop:03d}"
+
+    if crop_id not in crop_grp:
+        typer.echo(f"Error: crop {crop_id} not found in position {pos:03d}", err=True)
+        raise typer.Exit(code=1)
+
+    arr = crop_grp[crop_id]
+    n_times = arr.shape[0]
+    n_channels = arr.shape[1]
+    n_z = arr.shape[2]
+
+    if channel >= n_channels:
+        typer.echo(
+            f"Error: channel {channel} out of range (0-{n_channels-1})", err=True
+        )
+        raise typer.Exit(code=1)
+
+    time_indices = parse_slice_string(time, n_times)
+    typer.echo(f"Selected {len(time_indices)}/{n_times} timepoints")
+
+    # Load spots if provided
+    spots_by_t_crop: dict[tuple[int, str], list[tuple[float, float]]] = {}
+    if spots is not None:
+        with open(spots, newline="") as fh:
+            for row in csv.DictReader(fh):
+                t_val = int(row["t"])
+                c = row["crop"]
+                y_val = float(row["y"])
+                x_val = float(row["x"])
+                key = (t_val, c)
+                spots_by_t_crop.setdefault(key, []).append((y_val, x_val))
+        typer.echo(f"Loaded spots for {len(spots_by_t_crop)} (t,crop) pairs from {spots}")
+
+    # First pass: read all frames and compute global min/max
+    frames_raw = []
+    for t in track(time_indices, description="Reading frames"):
+        frame = np.array(arr[t, channel, 0])  # z=0
+        frames_raw.append(frame)
+
+    if not frames_raw:
+        typer.echo("Error: no frames to write", err=True)
+        raise typer.Exit(code=1)
+
+    # Compute global min/max across all frames
+    global_min = float(min(f.min() for f in frames_raw))
+    global_max = float(max(f.max() for f in frames_raw))
+    typer.echo(f"Global intensity range: [{global_min:.2f}, {global_max:.2f}]")
+
+    # Get colormap
+    if colormap == "grayscale":
+        cmap = None  # No colormap, use grayscale directly
+    else:
+        cmap = cm.get_cmap(colormap)
+
+    # Second pass: normalize all frames using global min/max and apply colormap
+    frames = []
+    for frame in frames_raw:
+        if global_max > global_min:
+            # Normalize to 0-1 range
+            normalized = (frame - global_min) / (global_max - global_min)
+        else:
+            normalized = np.zeros_like(frame, dtype=np.float64)
+        
+        if cmap is None:
+            # Grayscale: convert to uint8
+            frame_uint8 = (normalized * 255).astype(np.uint8)
+        else:
+            # Apply colormap: returns RGBA in 0-1 range
+            colored = cmap(normalized)
+            # Convert RGBA to RGB and then to uint8
+            frame_uint8 = (colored[:, :, :3] * 255).astype(np.uint8)
+        
+        frames.append(frame_uint8)
+
+    # Overlay spots if provided
+    overlay_count = 0
+    skip_count = 0
+    if spots is not None:
+        if not spots_by_t_crop:
+            typer.echo("Spots CSV is empty, skipped overlay")
+        else:
+            for i, t_val in enumerate(time_indices):
+                key = (t_val, crop_id)
+                spot_list = spots_by_t_crop.get(key)
+                if spot_list is None:
+                    skip_count += 1
+                    continue
+                overlay_count += 1
+                frame = frames[i]
+                h, w = frame.shape[0], frame.shape[1]
+                for y_f, x_f in spot_list:
+                    y_p, x_p = int(round(y_f)), int(round(x_f))
+                    _draw_marker(frame, y_p, x_p, h, w)
+            if overlay_count == 0:
+                typer.echo(f"Crop {crop_id} not in spots CSV, skipped overlay for all {len(frames)} frames")
+            elif skip_count > 0:
+                typer.echo(f"Skipped overlay for {skip_count} frames (t,crop not in spots CSV)")
+                typer.echo(f"Overlaid spots on {overlay_count} frames")
+            else:
+                typer.echo(f"Overlaid spots on {overlay_count} frames")
+
+    # Pad frames to be divisible by 16 (H.264 macroblock size) to prevent automatic resizing
+    if frames:
+        if len(frames[0].shape) == 2:
+            h, w = frames[0].shape
+            pad_h = (16 - (h % 16)) % 16
+            pad_w = (16 - (w % 16)) % 16
+        else:
+            h, w, _ = frames[0].shape
+            pad_h = (16 - (h % 16)) % 16
+            pad_w = (16 - (w % 16)) % 16
+        if pad_h > 0 or pad_w > 0:
+            typer.echo(f"Padding frames from ({h}, {w}) to ({h + pad_h}, {w + pad_w}) for codec compatibility")
+            pads = ((0, pad_h), (0, pad_w)) if len(frames[0].shape) == 2 else ((0, pad_h), (0, pad_w), (0, 0))
+            frames = [np.pad(f, pads, mode="constant", constant_values=0) for f in frames]
+
+    # Write movie (H.264 MP4, high quality)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    typer.echo(f"Writing {len(frames)} frames to {output} at {fps} fps...")
+    imageio.mimwrite(
+        str(output),
+        frames,
+        fps=fps,
+        codec="libx264",
+        pixelformat="yuv420p",
+        ffmpeg_params=["-preset", "slow", "-crf", "15"],
+    )
+    typer.echo(f"Wrote movie to {output}")
 
 
 if __name__ == "__main__":

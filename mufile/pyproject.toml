@@ -10,6 +10,9 @@ dependencies = [
     "tifffile>=2024.1",
     "zarr>=2.16,<3",
     "nd2>=0.10",
+    "imageio>=2.31",
+    "imageio-ffmpeg>=0.4",
+    "matplotlib>=3.8",
 ]
 
 [dependency-groups]

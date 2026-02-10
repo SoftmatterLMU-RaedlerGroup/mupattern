@@ -1,9 +1,9 @@
 """mukill – train classifiers and analyze kill curves for micropattern experiments.
 
 Commands:
-    mukill dataset --config dataset.yaml --output ./dataset
+    mukill dataset --zarr crops.zarr --pos 0 --annotations annotations.csv --output ./dataset
     mukill train --dataset ./dataset --output ./model
-    mukill predict --config predict.yaml --model ./model --output predictions.csv
+    mukill predict --zarr crops.zarr --pos 0 --model ./model --output predictions.csv
     mukill plot --input predictions.csv --output plot.png
     mukill clean --input predictions.csv --output cleaned.csv
 """
@@ -21,7 +21,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import typer
-import yaml
 import zarr
 from PIL import Image as PILImage
 from rich.progress import track
@@ -149,12 +148,21 @@ def _build_examples(
 
 @app.command()
 def dataset(
-    config: Annotated[
+    zarr_path: Annotated[
+        Path,
+        typer.Option("--zarr", help="Path to zarr store."),
+    ],
+    pos: Annotated[
+        int,
+        typer.Option(help="Position number."),
+    ],
+    annotations: Annotated[
         Path,
         typer.Option(
+            "--annotations",
             exists=True,
             dir_okay=False,
-            help="YAML config mapping zarr stores + positions to annotation CSVs.",
+            help="Path to annotations CSV file.",
         ),
     ],
     output: Annotated[
@@ -165,32 +173,21 @@ def dataset(
     """Create a HuggingFace Dataset from crops.zarr + annotations CSV."""
     from datasets import ClassLabel, Dataset, Features, Image, Value
 
-    with open(config) as f:
-        cfg = yaml.safe_load(f)
+    typer.echo(f"Loading pos {pos} from {zarr_path}")
+    ann_dict = _load_annotations(annotations)
+    typer.echo(f"  {len(ann_dict)} annotations from {annotations}")
 
-    all_examples: list[dict] = []
+    examples = _build_examples(zarr_path, pos, ann_dict)
+    typer.echo(f"  {len(examples)} labeled samples")
 
-    for source in cfg["sources"]:
-        zarr_path = Path(source["zarr"])
-        pos = int(source["pos"])
-        ann_path = Path(source["annotations"])
-
-        typer.echo(f"Loading pos {pos} from {zarr_path}")
-        annotations = _load_annotations(ann_path)
-        typer.echo(f"  {len(annotations)} annotations from {ann_path}")
-
-        examples = _build_examples(zarr_path, pos, annotations)
-        all_examples.extend(examples)
-        typer.echo(f"  {len(examples)} labeled samples")
-
-    if not all_examples:
+    if not examples:
         typer.echo("Error: no labeled samples found.", err=True)
         raise typer.Exit(code=1)
 
-    n_pos = sum(1 for e in all_examples if e["label"] == 1)
-    n_neg = len(all_examples) - n_pos
+    n_pos = sum(1 for e in examples if e["label"] == 1)
+    n_neg = len(examples) - n_pos
     typer.echo(
-        f"\nTotal: {len(all_examples)} samples ({n_pos} positive, {n_neg} negative)"
+        f"\nTotal: {len(examples)} samples ({n_pos} positive, {n_neg} negative)"
     )
 
     features = Features(
@@ -203,7 +200,7 @@ def dataset(
         }
     )
 
-    ds = Dataset.from_list(all_examples, features=features)
+    ds = Dataset.from_list(examples, features=features)
     ds.save_to_disk(str(output))
     typer.echo(f"Saved dataset to {output}")
 
@@ -409,13 +406,13 @@ def _predict_position(
 
 @app.command()
 def predict(
-    config: Annotated[
+    zarr_path: Annotated[
         Path,
-        typer.Option(
-            exists=True,
-            dir_okay=False,
-            help="YAML config with zarr path, positions, and optional ranges.",
-        ),
+        typer.Option("--zarr", help="Path to zarr store."),
+    ],
+    pos: Annotated[
+        int,
+        typer.Option(help="Position number."),
     ],
     model: Annotated[
         str,
@@ -431,13 +428,26 @@ def predict(
         int,
         typer.Option(help="Inference batch size."),
     ] = 64,
+    t_start: Annotated[
+        int | None,
+        typer.Option("--t-start", help="Start timepoint (inclusive)."),
+    ] = None,
+    t_end: Annotated[
+        int | None,
+        typer.Option("--t-end", help="End timepoint (exclusive)."),
+    ] = None,
+    crop_start: Annotated[
+        int | None,
+        typer.Option("--crop-start", help="Start crop index (inclusive)."),
+    ] = None,
+    crop_end: Annotated[
+        int | None,
+        typer.Option("--crop-end", help="End crop index (exclusive)."),
+    ] = None,
 ) -> None:
     """Run inference on crops.zarr positions and write predictions CSV."""
     import torch
     from transformers import AutoImageProcessor, AutoModelForImageClassification
-
-    with open(config) as f:
-        cfg = yaml.safe_load(f)
 
     typer.echo(f"Loading model from {model}")
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
@@ -447,46 +457,50 @@ def predict(
     processor = AutoImageProcessor.from_pretrained(str(model))
     typer.echo(f"  Device: {device}")
 
-    all_results: list[dict] = []
+    t_range = None
+    if t_start is not None and t_end is not None:
+        t_range = (t_start, t_end)
+    elif t_start is not None or t_end is not None:
+        typer.echo("Error: both --t-start and --t-end must be provided if using time range.", err=True)
+        raise typer.Exit(code=1)
 
-    for source in cfg["sources"]:
-        zarr_path = Path(source["zarr"])
-        pos = int(source["pos"])
+    crop_range = None
+    if crop_start is not None and crop_end is not None:
+        crop_range = (crop_start, crop_end)
+    elif crop_start is not None or crop_end is not None:
+        typer.echo("Error: both --crop-start and --crop-end must be provided if using crop range.", err=True)
+        raise typer.Exit(code=1)
 
-        t_range = tuple(source["t_range"]) if "t_range" in source else None
-        crop_range = tuple(source["crop_range"]) if "crop_range" in source else None
+    n_crops_desc = (
+        f"crops {crop_range[0]}-{crop_range[1]}" if crop_range else "all crops"
+    )
+    n_t_desc = f"t={t_range[0]}-{t_range[1]}" if t_range else "all t"
+    typer.echo(f"Predicting pos {pos} ({n_crops_desc}, {n_t_desc})")
 
-        n_crops_desc = (
-            f"crops {crop_range[0]}-{crop_range[1]}" if crop_range else "all crops"
-        )
-        n_t_desc = f"t={t_range[0]}-{t_range[1]}" if t_range else "all t"
-        typer.echo(f"Predicting pos {pos} ({n_crops_desc}, {n_t_desc})")
+    results = _predict_position(
+        zarr_path,
+        pos,
+        loaded_model,
+        processor,
+        device,
+        batch_size,
+        t_range,
+        crop_range,
+    )
 
-        results = _predict_position(
-            zarr_path,
-            pos,
-            loaded_model,
-            processor,
-            device,
-            batch_size,
-            t_range,
-            crop_range,
-        )
-        all_results.extend(results)
-
-        n_present = sum(1 for r in results if r["label"])
-        n_absent = len(results) - n_present
-        typer.echo(
-            f"  {len(results)} predictions ({n_present} present, {n_absent} absent)"
-        )
+    n_present = sum(1 for r in results if r["label"])
+    n_absent = len(results) - n_present
+    typer.echo(
+        f"  {len(results)} predictions ({n_present} present, {n_absent} absent)"
+    )
 
     output.parent.mkdir(parents=True, exist_ok=True)
     with open(output, "w", newline="") as fh:
         fh.write("t,crop,label\n")
-        for r in all_results:
+        for r in results:
             fh.write(f"{r['t']},{r['crop']},{str(r['label']).lower()}\n")
 
-    typer.echo(f"\nWrote {len(all_results)} predictions to {output}")
+    typer.echo(f"\nWrote {len(results)} predictions to {output}")
 
 
 # ---------------------------------------------------------------------------
