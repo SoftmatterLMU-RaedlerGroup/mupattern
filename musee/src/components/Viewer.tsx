@@ -3,7 +3,7 @@ import { useStore } from "@tanstack/react-store";
 import type { DirectoryStore } from "@/lib/directory-store";
 import type { StoreIndex, CropInfo } from "@/lib/zarr";
 import { loadFrame } from "@/lib/zarr";
-import { renderUint16ToCanvas } from "@/lib/render";
+import { renderUint16ToCanvas, drawSpots } from "@/lib/render";
 import {
   type Annotations,
   annotationKey,
@@ -11,15 +11,19 @@ import {
   downloadCSV,
   uploadCSV,
 } from "@/lib/annotations";
+import { type SpotMap, spotKey, uploadSpotCSV } from "@/lib/spots";
 import {
   viewerStore,
   setAnnotations as persistAnnotations,
+  setSpots as persistSpots,
   setSelectedPos as persistSelectedPos,
   setT as persistT,
   setC as persistC,
   setPage as persistPage,
   setContrast as persistContrast,
   setAnnotating as persistAnnotating,
+  setShowAnnotations as persistShowAnnotations,
+  setShowSpots as persistShowSpots,
 } from "@/store";
 import { Slider } from "@mupattern/ui/components/ui/slider";
 import { Button } from "@mupattern/ui/components/ui/button";
@@ -38,6 +42,9 @@ import {
   Download,
   Upload,
   Pencil,
+  Eye,
+  EyeOff,
+  Crosshair,
 } from "lucide-react";
 import { useTheme } from "./ThemeProvider";
 
@@ -60,11 +67,20 @@ export function Viewer({ store, index }: ViewerProps) {
   const contrastMax = useStore(viewerStore, (s) => s.contrastMax);
   const annotating = useStore(viewerStore, (s) => s.annotating);
   const annotationEntries = useStore(viewerStore, (s) => s.annotations);
+  const spotEntries = useStore(viewerStore, (s) => s.spots);
+  const showAnnotations = useStore(viewerStore, (s) => s.showAnnotations);
+  const showSpots = useStore(viewerStore, (s) => s.showSpots);
 
   // Derive annotations Map from persisted entries
   const annotations: Annotations = useMemo(
     () => new Map(annotationEntries),
     [annotationEntries]
+  );
+
+  // Derive spots Map from persisted entries
+  const spots: SpotMap = useMemo(
+    () => new Map(spotEntries),
+    [spotEntries]
   );
 
   // Ephemeral state
@@ -119,6 +135,10 @@ export function Viewer({ store, index }: ViewerProps) {
   const setAnnotating = useCallback((v: boolean) => persistAnnotating(v), []);
   const setAnnotations = useCallback(
     (a: Annotations) => persistAnnotations(a),
+    []
+  );
+  const setSpots = useCallback(
+    (s: SpotMap) => persistSpots(s),
     []
   );
 
@@ -180,6 +200,12 @@ export function Viewer({ store, index }: ViewerProps) {
           contrastMin,
           contrastMax
         );
+        // Overlay spots
+        if (showSpots) {
+          const key = spotKey(validPos, clampedT, pageCrops[i].cropId);
+          const cropSpots = spots.get(key);
+          if (cropSpots) drawSpots(canvas, cropSpots);
+        }
       }
     }
 
@@ -188,7 +214,7 @@ export function Viewer({ store, index }: ViewerProps) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store, validPos, clampedT, c, clampedPage, contrastMin, contrastMax, autoContrastDone]);
+  }, [store, validPos, clampedT, c, clampedPage, contrastMin, contrastMax, autoContrastDone, spots, showSpots]);
 
   const setCanvasRef = useCallback(
     (cropId: string) => (el: HTMLCanvasElement | null) => {
@@ -218,7 +244,7 @@ export function Viewer({ store, index }: ViewerProps) {
   // Annotation handler: click cycles true → false → remove
   const handleAnnotate = useCallback(
     (cropId: string) => {
-      const key = annotationKey(clampedT, cropId);
+      const key = annotationKey(validPos, clampedT, cropId);
       const current = annotations.get(key);
       const next = new Map(annotations);
       if (current === undefined) {
@@ -230,41 +256,67 @@ export function Viewer({ store, index }: ViewerProps) {
       }
       setAnnotations(next);
     },
-    [clampedT, annotations, setAnnotations]
+    [validPos, clampedT, annotations, setAnnotations]
   );
 
   const handleSave = useCallback(() => {
-    downloadCSV(annotations, `annotations_pos${validPos}.csv`);
+    downloadCSV(annotations, validPos, `annotations_pos${validPos}.csv`);
   }, [annotations, validPos]);
 
   const handleLoad = useCallback(async () => {
     try {
-      const loaded = await uploadCSV();
-      setAnnotations(loaded);
+      const loaded = await uploadCSV(validPos);
+      // Merge with existing annotations (preserving other positions)
+      const merged = new Map(annotations);
+      for (const [k, v] of loaded) merged.set(k, v);
+      setAnnotations(merged);
     } catch {
       // user cancelled
     }
-  }, [setAnnotations]);
+  }, [validPos, annotations, setAnnotations]);
 
-  // Build set of cropIds that have any annotation (at any timepoint)
+  const handleLoadSpots = useCallback(async () => {
+    try {
+      const loaded = await uploadSpotCSV(validPos);
+      // Merge with existing spots (preserving other positions)
+      const merged = new Map(spots);
+      for (const [k, v] of loaded) merged.set(k, v);
+      setSpots(merged);
+    } catch {
+      // user cancelled
+    }
+  }, [validPos, spots, setSpots]);
+
+  // Build set of cropIds that have any annotation (at any timepoint) for current position
   const annotatedCrops = useMemo(() => {
     const s = new Set<string>();
     for (const [key] of annotations) {
-      const { cropId } = parseKey(key);
-      s.add(cropId);
+      const { pos, cropId } = parseKey(key);
+      if (pos === validPos) s.add(cropId);
     }
     return s;
-  }, [annotations]);
+  }, [annotations, validPos]);
 
-  // Border color for annotation state
+  // Border color for annotation state (only when visible)
   function borderClass(cropId: string): string {
-    const key = annotationKey(clampedT, cropId);
+    if (!showAnnotations) return "";
+    const key = annotationKey(validPos, clampedT, cropId);
     const label = annotations.get(key);
     if (label === true) return "ring-2 ring-blue-500";
     if (label === false) return "ring-2 ring-red-500";
     if (annotatedCrops.has(cropId)) return "ring-2 ring-green-500";
     return "";
   }
+
+  // Count spots visible at current timepoint
+  const spotCount = useMemo(() => {
+    let count = 0;
+    for (const [key, list] of spots) {
+      const [pos, tStr] = key.split(":");
+      if (pos === validPos && parseInt(tStr, 10) === clampedT) count += list.length;
+    }
+    return count;
+  }, [spots, validPos, clampedT]);
 
   return (
     <div className="flex flex-col h-screen">
@@ -309,25 +361,6 @@ export function Viewer({ store, index }: ViewerProps) {
           <span className="text-sm text-muted-foreground">
             {crops.length} crops
           </span>
-          <div className="mx-1 h-4 w-px bg-border" />
-          <Button
-            variant={annotating ? "default" : "ghost"}
-            size="xs"
-            onClick={() => setAnnotating(!annotating)}
-            title="Toggle annotation mode"
-          >
-            <Pencil className="size-3" />
-            {annotating ? "Annotating" : "Annotate"}
-          </Button>
-          <span className="text-sm text-muted-foreground tabular-nums">
-            {annotations.size} labeled
-          </span>
-          <Button variant="ghost" size="icon-xs" onClick={handleLoad} title="Load annotations CSV">
-            <Upload className="size-3.5" />
-          </Button>
-          <Button variant="ghost" size="icon-xs" onClick={handleSave} title="Save annotations CSV" disabled={annotations.size === 0}>
-            <Download className="size-3.5" />
-          </Button>
           <div className="mx-1 h-4 w-px bg-border" />
           <div className="flex items-center gap-2">
             <Sun className="size-3.5 text-muted-foreground" />
@@ -405,26 +438,102 @@ export function Viewer({ store, index }: ViewerProps) {
         </div>
       </div>
 
-      {/* Crop grid */}
-      <div className="flex-1 overflow-hidden p-4">
-        <div className="grid grid-cols-5 grid-rows-5 gap-2 h-full">
-          {pageCrops.map((crop) => (
-            <div
-              key={crop.cropId}
-              className={`relative rounded-sm ${annotating ? "cursor-crosshair" : ""} ${borderClass(crop.cropId)}`}
-              onClick={annotating ? () => handleAnnotate(crop.cropId) : undefined}
-            >
-              <canvas
-                ref={setCanvasRef(crop.cropId)}
-                className="block w-full h-full object-contain"
-                style={{ imageRendering: "pixelated" }}
-              />
-              <div className="absolute bottom-0 left-0 px-1 text-[10px] bg-black/60 text-white">
-                {crop.cropId}
+      {/* Main area: crop grid + right sidebar */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Crop grid */}
+        <div className="flex-1 overflow-hidden p-4">
+          <div className="grid grid-cols-5 grid-rows-5 gap-2 h-full">
+            {pageCrops.map((crop) => (
+              <div
+                key={crop.cropId}
+                className={`relative rounded-sm ${annotating ? "cursor-crosshair" : ""} ${borderClass(crop.cropId)}`}
+                onClick={annotating ? () => handleAnnotate(crop.cropId) : undefined}
+              >
+                <canvas
+                  ref={setCanvasRef(crop.cropId)}
+                  className="block w-full h-full object-contain"
+                  style={{ imageRendering: "pixelated" }}
+                />
+                <div className="absolute bottom-0 left-0 px-1 text-[10px] bg-black/60 text-white">
+                  {crop.cropId}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
+
+        {/* Right sidebar: overlays */}
+        <aside className="w-48 border-l border-border p-3 flex flex-col gap-4 text-sm overflow-y-auto">
+          {/* Annotations section */}
+          <div className="flex flex-col gap-2">
+            <h3 className="font-medium text-xs uppercase text-muted-foreground tracking-wide">Annotations</h3>
+            <Button
+              variant={annotating ? "default" : "ghost"}
+              size="xs"
+              className="justify-start"
+              onClick={() => setAnnotating(!annotating)}
+              title="Toggle annotation mode"
+            >
+              <Pencil className="size-3" />
+              {annotating ? "Annotating" : "Annotate"}
+            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="icon-xs" onClick={handleLoad} title="Load annotations CSV">
+                <Upload className="size-3.5" />
+              </Button>
+              <Button variant="ghost" size="icon-xs" onClick={handleSave} title="Save annotations CSV" disabled={annotations.size === 0}>
+                <Download className="size-3.5" />
+              </Button>
+              <span className="text-muted-foreground tabular-nums text-xs">
+                {annotations.size} labeled
+              </span>
+            </div>
+            {annotations.size > 0 && (
+              <Button
+                variant="ghost"
+                size="xs"
+                className="justify-start"
+                onClick={() => persistShowAnnotations(!showAnnotations)}
+              >
+                {showAnnotations ? <Eye className="size-3" /> : <EyeOff className="size-3" />}
+                {showAnnotations ? "Visible" : "Hidden"}
+              </Button>
+            )}
+          </div>
+
+          <div className="h-px bg-border" />
+
+          {/* Spots section */}
+          <div className="flex flex-col gap-2">
+            <h3 className="font-medium text-xs uppercase text-muted-foreground tracking-wide">Spots</h3>
+            <Button
+              variant="ghost"
+              size="xs"
+              className="justify-start"
+              onClick={handleLoadSpots}
+              title="Load spots CSV"
+            >
+              <Crosshair className="size-3" />
+              Load CSV
+            </Button>
+            {spots.size > 0 && (
+              <>
+                <span className="text-muted-foreground tabular-nums text-xs">
+                  {spotCount} spots (t={clampedT})
+                </span>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  className="justify-start"
+                  onClick={() => persistShowSpots(!showSpots)}
+                >
+                  {showSpots ? <Eye className="size-3" /> : <EyeOff className="size-3" />}
+                  {showSpots ? "Visible" : "Hidden"}
+                </Button>
+              </>
+            )}
+          </div>
+        </aside>
       </div>
 
       {/* Pagination */}

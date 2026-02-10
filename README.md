@@ -39,6 +39,11 @@ ND2 ──► mufile convert ──► raw TIFFs ──► mupattern ──► b
                                                         │
                                                         ▼
                                                 muexpression plot ──► expression plots
+
+                                                  muspot detect ──► spots CSV
+                                                        │
+                                                        ▼
+                                                    muspot plot ──► spot count plots
 ```
 
 ## Packages
@@ -50,6 +55,7 @@ ND2 ──► mufile convert ──► raw TIFFs ──► mupattern ──► b
 | `musee/` | React/Vite | Browse crops in the zarr store, annotate cell presence/absence |
 | `mukill/` | Python CLI | Build HuggingFace Dataset, train ResNet-18 classifier, run inference, enforce monotonicity, plot kill curves |
 | `muexpression/` | Python CLI | Measure fluorescence expression per crop over time, plot intensity curves |
+| `muspot/` | Python CLI | Detect fluorescent spots per crop over time using spotiflow, plot spot count curves |
 | `shared/` | React | Shared shadcn/ui components used by mupattern and musee |
 
 ## Prerequisites
@@ -279,6 +285,42 @@ The `plot` command generates two panels:
 
 Death times at `t=0` are excluded — a crop absent at `t=0` means no cell was ever present on that pattern site, not a death event.
 
+### 8. Detect spots (muspot)
+
+Detect fluorescent spots per crop per timepoint using spotiflow.
+
+Create a config YAML:
+
+```yaml
+# spots.yaml
+sources:
+  - zarr: /path/to/crops.zarr
+    pos: 0
+    channel: 1
+```
+
+Run:
+
+```bash
+cd muspot
+
+# Detect spots
+uv run muspot detect \
+  --config /path/to/spots.yaml \
+  --output /path/to/spots.csv
+
+# Use a different spotiflow model
+uv run muspot detect \
+  --config /path/to/spots.yaml \
+  --output /path/to/spots.csv \
+  --model general
+
+# Plot spot counts over time
+uv run muspot plot \
+  --input /path/to/spots.csv \
+  --output /path/to/spots.png
+```
+
 ## Results
 
 ### Pos150 — Killing 2D (MCF7 + CAR-T in suspension)
@@ -385,6 +427,17 @@ sources:
     annotations: /path/to/annotations.csv
 ```
 
+### Spot CSV (muspot detect → muspot plot)
+
+```csv
+t,crop,spot,y,x
+0,000,0,12.34,56.78
+0,000,1,23.45,67.89
+1,000,0,11.22,55.66
+```
+
+One row per detected spot. `spot` is a 0-based index within each `(t, crop)` frame. `y` and `x` are subpixel spot coordinates.
+
 ### Predict config YAML (mukill predict)
 
 ```yaml
@@ -411,6 +464,7 @@ cd musee && bun run dev
 cd mufile && uv run mufile --help
 cd mukill && uv run mukill --help
 cd muexpression && uv run muexpression --help
+cd muspot && uv run muspot --help
 ```
 
 ## Tech stack
@@ -419,3 +473,4 @@ cd muexpression && uv run muexpression --help
 - **mufile**: Python, typer, zarr v2, tifffile, numpy, nd2
 - **mukill**: Python, typer, transformers (HuggingFace), torch, zarr v2, datasets, evaluate, pandas, matplotlib
 - **muexpression**: Python, typer, zarr v2, numpy, pandas, matplotlib
+- **muspot**: Python, typer, spotiflow, zarr v2, numpy, pandas, matplotlib
