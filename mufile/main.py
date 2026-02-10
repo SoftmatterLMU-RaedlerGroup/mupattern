@@ -9,190 +9,24 @@ Commands:
 
 from __future__ import annotations
 
-import csv
-import re
 from pathlib import Path
 from typing import Annotated, Literal
 
-import numpy as np
-import tifffile
 import typer
-import zarr
-from rich.progress import track
+
+from core import (
+    _read_bbox_csv,
+    parse_slice_string,
+    run_convert,
+    run_crop,
+    run_movie,
+)
 
 app = typer.Typer(add_completion=False)
 
 
-def _draw_marker(
-    frame: np.ndarray, y: int, x: int, h: int, w: int, size: int = 1
-) -> None:
-    """Draw a white diagonal cross (X) at (y, x), overwriting pixels."""
-    white = 255 if len(frame.shape) == 2 else np.array([255, 255, 255], dtype=np.uint8)
-    for d in range(-size, size + 1):
-        for yy, xx in [(y + d, x + d), (y + d, x - d)]:
-            if 0 <= yy < h and 0 <= xx < w:
-                frame[yy, xx] = white
-
-
-# ---------------------------------------------------------------------------
-# Helpers (crop)
-# ---------------------------------------------------------------------------
-
-_TIFF_RE = re.compile(r"img_channel(\d+)_position(\d+)_time(\d+)_z(\d+)\.tif")
-
-
-def _discover_tiffs(pos_dir: Path) -> dict[tuple[int, int, int], Path]:
-    """Return {(channel, time, z): path} for every TIFF in *pos_dir*."""
-    index: dict[tuple[int, int, int], Path] = {}
-    for p in sorted(pos_dir.iterdir()):
-        m = _TIFF_RE.match(p.name)
-        if m is None:
-            continue
-        c, _pos, t, z = (int(g) for g in m.groups())
-        index[(c, t, z)] = p
-    return index
-
-
-def _axis_range(index: dict[tuple[int, int, int], Path]) -> tuple[int, int, int]:
-    """Return (n_channels, n_times, n_z) from the discovered index."""
-    cs = {k[0] for k in index}
-    ts = {k[1] for k in index}
-    zs = {k[2] for k in index}
-    return len(cs), len(ts), len(zs)
-
-
-def _read_bbox_csv(csv_path: Path) -> list[dict[str, int]]:
-    """Parse the mupattern bbox CSV -> list of {crop, x, y, w, h}."""
-    rows: list[dict[str, int]] = []
-    with open(csv_path, newline="") as fh:
-        for row in csv.DictReader(fh):
-            rows.append({k: int(v) for k, v in row.items()})
-    return rows
-
-
-def _crop_position(
-    pos_dir: Path,
-    pos: int,
-    bboxes: list[dict[str, int]],
-    output: Path,
-    background: bool = False,
-) -> None:
-    """Crop every bbox across all frames and write into *output* zarr store."""
-    index = _discover_tiffs(pos_dir)
-    if not index:
-        raise typer.BadParameter(f"No TIFFs found in {pos_dir}")
-
-    n_channels, n_times, n_z = _axis_range(index)
-    typer.echo(f"Discovered {len(index)} TIFFs: T={n_times}, C={n_channels}, Z={n_z}")
-
-    sample = tifffile.imread(next(iter(index.values())))
-    dtype = sample.dtype
-
-    store = zarr.DirectoryStore(str(output))
-    root = zarr.open_group(store, mode="a")
-    crop_grp = root.require_group(f"pos/{pos:03d}/crop")
-
-    n_crops = len(bboxes)
-    typer.echo(f"Cropping {n_crops} crops ...")
-
-    arrays: list[zarr.Array] = []
-    for i, bb in enumerate(bboxes):
-        arr = crop_grp.zeros(
-            f"{i:03d}",
-            shape=(n_times, n_channels, n_z, bb["h"], bb["w"]),
-            chunks=(1, 1, 1, bb["h"], bb["w"]),
-            dtype=dtype,
-            overwrite=True,
-        )
-        arr.attrs["axis_names"] = ["t", "c", "z", "y", "x"]
-        arr.attrs["bbox"] = bb
-        arrays.append(arr)
-
-    bg_arr = None
-    if background:
-        mask = np.zeros(sample.shape, dtype=bool)
-        for bb in bboxes:
-            x, y, w, h = bb["x"], bb["y"], bb["w"], bb["h"]
-            mask[y : y + h, x : x + w] = True
-
-        bg_arr = root.zeros(
-            f"pos/{pos:03d}/background",
-            shape=(n_times, n_channels, n_z),
-            chunks=(1, 1, 1),
-            dtype=np.float64,
-            overwrite=True,
-        )
-        bg_arr.attrs["axis_names"] = ["t", "c", "z"]
-        bg_arr.attrs["description"] = "Median of pixels outside all crop bounding boxes"
-
-    sorted_keys = sorted(index.keys())
-    for c, t, z in track(sorted_keys, description="Reading frames"):
-        frame = tifffile.imread(index[(c, t, z)])
-        for crop_idx, bb in enumerate(bboxes):
-            x, y, w, h = bb["x"], bb["y"], bb["w"], bb["h"]
-            arrays[crop_idx][t, c, z] = frame[y : y + h, x : x + w]
-        if bg_arr is not None:
-            bg_arr[t, c, z] = float(np.median(frame[~mask]))
-
-    typer.echo(f"Wrote {output}")
-
-
-# ---------------------------------------------------------------------------
-# Helpers (convert)
-# ---------------------------------------------------------------------------
-
-
-def parse_slice_string(s: str, length: int) -> list[int]:
-    """Parse a human-friendly slice string into a sorted list of unique indices.
-
-    Accepts ``"all"`` or a comma-separated mix of single integers and Python-style
-    slices (``start:stop`` or ``start:stop:step``).  Negative indices are resolved
-    relative to *length* using normal Python semantics.
-
-    Examples::
-
-        >>> parse_slice_string("all", 10)
-        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-        >>> parse_slice_string("0:5, 10, 20:30:2", 50)
-        [0, 1, 2, 3, 4, 10, 20, 22, 24, 26, 28]
-        >>> parse_slice_string("-3:", 10)
-        [7, 8, 9]
-
-    Raises :class:`typer.BadParameter` on invalid input.
-    """
-    if s.strip().lower() == "all":
-        return list(range(length))
-
-    indices: set[int] = set()
-    for segment in s.split(","):
-        segment = segment.strip()
-        if not segment:
-            continue
-        try:
-            if ":" in segment:
-                parts = [(int(p) if p else None) for p in segment.split(":")]
-                if len(parts) == 3 and parts[2] == 0:
-                    raise typer.BadParameter(f"Slice step cannot be zero: {segment!r}")
-                indices.update(range(*slice(*parts).indices(length)))
-            else:
-                idx = int(segment)
-                if idx < -length or idx >= length:
-                    raise typer.BadParameter(
-                        f"Index {idx} out of range for length {length}"
-                    )
-                indices.add(idx % length)
-        except ValueError:
-            raise typer.BadParameter(f"Invalid slice segment: {segment!r}")
-
-    if not indices:
-        raise typer.BadParameter(f"Slice string {s!r} produced no indices")
-
-    return sorted(indices)
-
-
-# ---------------------------------------------------------------------------
-# Commands
-# ---------------------------------------------------------------------------
+def _progress_echo(progress: float, message: str) -> None:
+    typer.echo(message)
 
 
 @app.command()
@@ -228,15 +62,14 @@ def crop(
     ],
 ) -> None:
     """Crop pattern positions from microscopy TIFFs into a zarr store."""
-    pos_dir = input_dir / f"Pos{pos}"
-    if not pos_dir.is_dir():
-        typer.echo(f"Error: Position directory not found: {pos_dir}", err=True)
-        raise typer.Exit(code=1)
+    bbox_list = _read_bbox_csv(bbox)
+    typer.echo(f"Loaded {len(bbox_list)} bounding boxes from {bbox}")
 
-    bboxes = _read_bbox_csv(bbox)
-    typer.echo(f"Loaded {len(bboxes)} bounding boxes from {bbox}")
-
-    _crop_position(pos_dir, pos, bboxes, output, background=background)
+    try:
+        run_crop(input_dir, pos, bbox, output, background, on_progress=_progress_echo)
+    except (FileNotFoundError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1) from e
 
 
 @app.command()
@@ -286,39 +119,27 @@ def convert(
     n_time = sizes.get("T", 1)
     n_chan = sizes.get("C", 1)
     n_z = sizes.get("Z", 1)
+    f.close()
 
-    # Build dimension order for indexing (excludes Y, X)
-    dim_order = [d for d in sizes.keys() if d not in ("Y", "X")]
-    dask_arr = f.to_dask()
-
-    # Get position names from ND2 metadata (e.g. "Pos140", "Pos150")
-    pos_names: list[str | None] = []
     try:
-        exp = f.experiment
+        pos_indices = parse_slice_string(pos, n_pos)
+        time_indices = parse_slice_string(time, n_time)
+    except ValueError as e:
+        raise typer.BadParameter(str(e)) from e
+
+    total = len(pos_indices) * len(time_indices) * n_chan * n_z
+    pos_names = [f"Pos{i}" for i in range(n_pos)]
+    try:
+        f2 = nd2.ND2File(str(input))
+        exp = f2.experiment
         if exp:
             for loop in exp:
                 if loop.type == "XYPosLoop":
                     pos_names = [p.name for p in loop.parameters.points]
                     break
+        f2.close()
     except Exception:
         pass
-
-    # Fill in missing names with Pos0, Pos1, ...
-    pos_names = [
-        name if name else f"Pos{i}"
-        for i, name in enumerate(pos_names)
-    ] or [f"Pos{i}" for i in range(n_pos)]
-
-    # Extract position number from name (e.g. "Pos140" -> 140)
-    def _pos_number(name: str) -> int:
-        m = re.search(r"(\d+)", name)
-        return int(m.group(1)) if m else 0
-
-    # Resolve slice strings into concrete index lists
-    pos_indices = parse_slice_string(pos, n_pos)
-    time_indices = parse_slice_string(time, n_time)
-
-    total = len(pos_indices) * len(time_indices) * n_chan * n_z
 
     typer.echo(f"ND2: {n_pos} positions, T={n_time}, C={n_chan}, Z={n_z}")
     typer.echo("")
@@ -329,54 +150,21 @@ def convert(
     )
     typer.echo(f"Total frames to write: {total}")
     typer.echo("")
-
     typer.echo("Positions:")
     typer.echo(f"  {', '.join(pos_names[i] for i in pos_indices)}")
     typer.echo("")
-
     typer.echo("Timepoints (original indices):")
     typer.echo(f"  {time_indices}")
-    typer.echo("")
-
     typer.echo("")
 
     if not typer.confirm("Proceed with conversion?"):
         raise typer.Abort()
 
-    output.mkdir(parents=True, exist_ok=True)
-
-    with typer.progressbar(length=total, label="Writing TIFFs") as progress:
-        for p_idx in pos_indices:
-            pos_name = pos_names[p_idx]
-            pos_num = _pos_number(pos_name)
-            pos_dir = output / pos_name
-            pos_dir.mkdir(exist_ok=True)
-
-            # Write time mapping CSV so downstream tools know the remapping
-            with open(pos_dir / "time_map.csv", "w", newline="") as fh:
-                writer = csv.writer(fh)
-                writer.writerow(["t", "t_real"])
-                for t_new, t_orig in enumerate(time_indices):
-                    writer.writerow([t_new, t_orig])
-
-            for t_new, t_orig in enumerate(time_indices):
-                for c in range(n_chan):
-                    for z in range(n_z):
-                        coords = {"P": p_idx, "T": t_orig, "C": c, "Z": z}
-                        idx = tuple(coords.get(d, 0) for d in dim_order)
-                        frame = dask_arr[idx].compute()
-
-                        fname = (
-                            f"img_channel{c:03d}"
-                            f"_position{pos_num:03d}"
-                            f"_time{t_new:09d}"
-                            f"_z{z:03d}.tif"
-                        )
-                        tifffile.imwrite(str(pos_dir / fname), frame)
-                        progress.update(1)
-
-    f.close()
-    typer.echo(f"Wrote {output}")
+    try:
+        run_convert(input, pos, time, output, on_progress=_progress_echo)
+    except ValueError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1) from e
 
 
 @app.command()
@@ -433,143 +221,19 @@ def movie(
     ] = None,
 ) -> None:
     """Create a movie from a zarr crop."""
-    import imageio
-    import matplotlib.cm as cm
-
-    typer.echo(f"Loading crop {crop:03d} from pos {pos:03d} in {input}")
-
-    store = zarr.DirectoryStore(str(input))
-    root = zarr.open_group(store, mode="r")
-    crop_grp = root[f"pos/{pos:03d}/crop"]
-    crop_id = f"{crop:03d}"
-
-    if crop_id not in crop_grp:
-        typer.echo(f"Error: crop {crop_id} not found in position {pos:03d}", err=True)
-        raise typer.Exit(code=1)
-
-    arr = crop_grp[crop_id]
-    n_times = arr.shape[0]
-    n_channels = arr.shape[1]
-    n_z = arr.shape[2]
-
-    if channel >= n_channels:
-        typer.echo(
-            f"Error: channel {channel} out of range (0-{n_channels-1})", err=True
+    try:
+        run_movie(
+            input,
+            pos,
+            crop,
+            channel,
+            time,
+            output,
+            fps,
+            colormap,
+            spots,
+            on_progress=_progress_echo,
         )
-        raise typer.Exit(code=1)
-
-    time_indices = parse_slice_string(time, n_times)
-    typer.echo(f"Selected {len(time_indices)}/{n_times} timepoints")
-
-    # Load spots if provided
-    spots_by_t_crop: dict[tuple[int, str], list[tuple[float, float]]] = {}
-    if spots is not None:
-        with open(spots, newline="") as fh:
-            for row in csv.DictReader(fh):
-                t_val = int(row["t"])
-                c = row["crop"]
-                y_val = float(row["y"])
-                x_val = float(row["x"])
-                key = (t_val, c)
-                spots_by_t_crop.setdefault(key, []).append((y_val, x_val))
-        typer.echo(f"Loaded spots for {len(spots_by_t_crop)} (t,crop) pairs from {spots}")
-
-    # First pass: read all frames and compute global min/max
-    frames_raw = []
-    for t in track(time_indices, description="Reading frames"):
-        frame = np.array(arr[t, channel, 0])  # z=0
-        frames_raw.append(frame)
-
-    if not frames_raw:
-        typer.echo("Error: no frames to write", err=True)
-        raise typer.Exit(code=1)
-
-    # Compute global min/max across all frames
-    global_min = float(min(f.min() for f in frames_raw))
-    global_max = float(max(f.max() for f in frames_raw))
-    typer.echo(f"Global intensity range: [{global_min:.2f}, {global_max:.2f}]")
-
-    # Get colormap
-    if colormap == "grayscale":
-        cmap = None  # No colormap, use grayscale directly
-    else:
-        cmap = cm.get_cmap(colormap)
-
-    # Second pass: normalize all frames using global min/max and apply colormap
-    frames = []
-    for frame in frames_raw:
-        if global_max > global_min:
-            # Normalize to 0-1 range
-            normalized = (frame - global_min) / (global_max - global_min)
-        else:
-            normalized = np.zeros_like(frame, dtype=np.float64)
-        
-        if cmap is None:
-            # Grayscale: convert to uint8
-            frame_uint8 = (normalized * 255).astype(np.uint8)
-        else:
-            # Apply colormap: returns RGBA in 0-1 range
-            colored = cmap(normalized)
-            # Convert RGBA to RGB and then to uint8
-            frame_uint8 = (colored[:, :, :3] * 255).astype(np.uint8)
-        
-        frames.append(frame_uint8)
-
-    # Overlay spots if provided
-    overlay_count = 0
-    skip_count = 0
-    if spots is not None:
-        if not spots_by_t_crop:
-            typer.echo("Spots CSV is empty, skipped overlay")
-        else:
-            for i, t_val in enumerate(time_indices):
-                key = (t_val, crop_id)
-                spot_list = spots_by_t_crop.get(key)
-                if spot_list is None:
-                    skip_count += 1
-                    continue
-                overlay_count += 1
-                frame = frames[i]
-                h, w = frame.shape[0], frame.shape[1]
-                for y_f, x_f in spot_list:
-                    y_p, x_p = int(round(y_f)), int(round(x_f))
-                    _draw_marker(frame, y_p, x_p, h, w)
-            if overlay_count == 0:
-                typer.echo(f"Crop {crop_id} not in spots CSV, skipped overlay for all {len(frames)} frames")
-            elif skip_count > 0:
-                typer.echo(f"Skipped overlay for {skip_count} frames (t,crop not in spots CSV)")
-                typer.echo(f"Overlaid spots on {overlay_count} frames")
-            else:
-                typer.echo(f"Overlaid spots on {overlay_count} frames")
-
-    # Pad frames to be divisible by 16 (H.264 macroblock size) to prevent automatic resizing
-    if frames:
-        if len(frames[0].shape) == 2:
-            h, w = frames[0].shape
-            pad_h = (16 - (h % 16)) % 16
-            pad_w = (16 - (w % 16)) % 16
-        else:
-            h, w, _ = frames[0].shape
-            pad_h = (16 - (h % 16)) % 16
-            pad_w = (16 - (w % 16)) % 16
-        if pad_h > 0 or pad_w > 0:
-            typer.echo(f"Padding frames from ({h}, {w}) to ({h + pad_h}, {w + pad_w}) for codec compatibility")
-            pads = ((0, pad_h), (0, pad_w)) if len(frames[0].shape) == 2 else ((0, pad_h), (0, pad_w), (0, 0))
-            frames = [np.pad(f, pads, mode="constant", constant_values=0) for f in frames]
-
-    # Write movie (H.264 MP4, high quality)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    typer.echo(f"Writing {len(frames)} frames to {output} at {fps} fps...")
-    imageio.mimwrite(
-        str(output),
-        frames,
-        fps=fps,
-        codec="libx264",
-        pixelformat="yuv420p",
-        ffmpeg_params=["-preset", "slow", "-crf", "15"],
-    )
-    typer.echo(f"Wrote movie to {output}")
-
-
-if __name__ == "__main__":
-    app()
+    except ValueError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1) from e
