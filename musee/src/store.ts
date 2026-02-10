@@ -3,6 +3,8 @@ import { createPersistedStore } from "@/lib/persist"
 export interface ViewerState {
   /** Annotations as [key, value] pairs (Map can't be JSON-serialized directly) */
   annotations: [string, boolean][]
+  /** Spots as [key, spots[]] pairs keyed by "t:cropId" */
+  spots: [string, { y: number; x: number }[]][]
   selectedPos: string
   t: number
   c: number
@@ -10,12 +12,15 @@ export interface ViewerState {
   contrastMin: number
   contrastMax: number
   annotating: boolean
+  showAnnotations: boolean
+  showSpots: boolean
   /** Which positions were selected in the picker (for auto-reload) */
   selectedPositions: string[]
 }
 
 const defaultState: ViewerState = {
   annotations: [],
+  spots: [],
   selectedPos: "",
   t: 0,
   c: 0,
@@ -23,6 +28,8 @@ const defaultState: ViewerState = {
   contrastMin: 0,
   contrastMax: 65535,
   annotating: false,
+  showAnnotations: true,
+  showSpots: true,
   selectedPositions: [],
 }
 
@@ -67,6 +74,21 @@ export function setAnnotating(annotating: boolean) {
 
 export function setSelectedPositions(selectedPositions: string[]) {
   viewerStore.setState((s) => ({ ...s, selectedPositions }))
+}
+
+export function setSpots(spots: Map<string, { y: number; x: number }[]>) {
+  viewerStore.setState((s) => ({
+    ...s,
+    spots: [...spots.entries()],
+  }))
+}
+
+export function setShowAnnotations(showAnnotations: boolean) {
+  viewerStore.setState((s) => ({ ...s, showAnnotations }))
+}
+
+export function setShowSpots(showSpots: boolean) {
+  viewerStore.setState((s) => ({ ...s, showSpots }))
 }
 
 // --- Helpers ---

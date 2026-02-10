@@ -1,4 +1,5 @@
-import { ChevronsUpDown } from "lucide-react"
+import { useCallback, useRef } from "react"
+import { ChevronsUpDown, ImageIcon, FileText } from "lucide-react"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@mupattern/ui/components/ui/collapsible"
 import { Separator } from "@mupattern/ui/components/ui/separator"
 import { Button } from "@mupattern/ui/components/ui/button"
@@ -8,9 +9,26 @@ import { TransformEditor } from "@/components/TransformEditor"
 import { ExportButton } from "@/components/ExportButton"
 import { Slider } from "@mupattern/ui/components/ui/slider"
 import { Label } from "@mupattern/ui/components/ui/label"
+import { parseYAMLConfig } from "@/lib/units"
+import * as UTIF from "utif2"
 import type { Calibration, Lattice, PatternConfigUm, Transform } from "@/types"
 
+const ACCEPTED_TYPES = new Set(["image/png", "image/tiff", "image/tif"])
+const TIFF_TYPES = new Set(["image/tiff", "image/tif"])
+
+function isTiff(file: File): boolean {
+  return TIFF_TYPES.has(file.type) || /\.tiff?$/i.test(file.name)
+}
+
+function stripExtension(filename: string): string {
+  return filename.replace(/\.[^.]+$/, "")
+}
+
 interface SidebarProps {
+  imageBaseName: string | null
+  onImageLoad: (img: HTMLImageElement, filename: string) => void
+  onConfigLoad: (config: PatternConfigUm) => void
+  onCalibrationLoad: (cal: Calibration) => void
   calibration: Calibration
   onCalibrationChange: (cal: Calibration) => void
   pattern: PatternConfigUm
@@ -54,6 +72,10 @@ function Section({
 }
 
 export function Sidebar({
+  imageBaseName,
+  onImageLoad,
+  onConfigLoad,
+  onCalibrationLoad,
   calibration,
   onCalibrationChange,
   pattern,
@@ -71,8 +93,96 @@ export function Sidebar({
   onDetect,
   onFitGrid,
 }: SidebarProps) {
+  const imageInputRef = useRef<HTMLInputElement>(null)
+  const configInputRef = useRef<HTMLInputElement>(null)
+
+  const handleImageFile = useCallback((file: File) => {
+    const baseName = stripExtension(file.name)
+
+    if (isTiff(file)) {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        try {
+          const buffer = e.target?.result as ArrayBuffer
+          const ifds = UTIF.decode(buffer)
+          if (ifds.length === 0) return
+          UTIF.decodeImage(buffer, ifds[0])
+          const rgba = UTIF.toRGBA8(ifds[0])
+          const w = ifds[0].width
+          const h = ifds[0].height
+
+          const canvas = document.createElement("canvas")
+          canvas.width = w
+          canvas.height = h
+          const ctx = canvas.getContext("2d")!
+          const imageData = new ImageData(new Uint8ClampedArray(rgba.buffer as ArrayBuffer), w, h)
+          ctx.putImageData(imageData, 0, 0)
+
+          const img = new Image()
+          img.onload = () => onImageLoad(img, baseName)
+          img.src = canvas.toDataURL("image/png")
+        } catch {
+          // silently fail
+        }
+      }
+      reader.readAsArrayBuffer(file)
+    } else if (ACCEPTED_TYPES.has(file.type)) {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        const img = new Image()
+        img.onload = () => onImageLoad(img, baseName)
+        img.src = e.target?.result as string
+      }
+      reader.readAsDataURL(file)
+    }
+  }, [onImageLoad])
+
+  const handleConfigFile = useCallback((file: File) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        const text = e.target?.result as string
+        const { pattern, calibration } = parseYAMLConfig(text)
+        onConfigLoad(pattern)
+        if (calibration) onCalibrationLoad(calibration)
+      } catch {
+        // silently fail
+      }
+    }
+    reader.readAsText(file)
+  }, [onConfigLoad, onCalibrationLoad])
+
   return (
     <aside className="w-80 flex-shrink-0 overflow-y-auto border-l border-border p-4 space-y-1">
+      <Section title="Files">
+        <div className="space-y-1.5">
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/png,image/tiff,.tif,.tiff"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImageFile(f); e.target.value = "" }}
+            className="hidden"
+          />
+          <Button variant="secondary" size="sm" className="w-full h-7 text-base" onClick={() => imageInputRef.current?.click()}>
+            <ImageIcon className="size-3.5" />
+            {imageBaseName ? `${imageBaseName}` : "Load image"}
+          </Button>
+          <input
+            ref={configInputRef}
+            type="file"
+            accept=".yaml,.yml"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleConfigFile(f); e.target.value = "" }}
+            className="hidden"
+          />
+          <Button variant="secondary" size="sm" className="w-full h-7 text-base" onClick={() => configInputRef.current?.click()}>
+            <FileText className="size-3.5" />
+            Load config
+          </Button>
+        </div>
+      </Section>
+
+      <Separator />
+
       <Section title="Calibration">
         <div className="space-y-3">
           <CalibrationControls

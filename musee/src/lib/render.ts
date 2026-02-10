@@ -35,6 +35,24 @@ export function renderUint16ToCanvas(
 }
 
 /**
+ * Draw spot markers as cyan hollow circles on an already-rendered canvas.
+ */
+export function drawSpots(
+  canvas: HTMLCanvasElement,
+  spots: { y: number; x: number }[]
+) {
+  const ctx = canvas.getContext("2d");
+  if (!ctx || spots.length === 0) return;
+  ctx.strokeStyle = "cyan";
+  ctx.lineWidth = 1;
+  for (const { x, y } of spots) {
+    ctx.beginPath();
+    ctx.arc(x, y, 2, 0, 2 * Math.PI);
+    ctx.stroke();
+  }
+}
+
+/**
  * Compute auto-contrast bounds (2nd–98th percentile) from uint16 data.
  */
 export function autoContrast(data: Uint16Array): [number, number] {

@@ -138,12 +138,7 @@ function App() {
 
   return (
     <div className="flex h-screen flex-col">
-      <Header
-        imageBaseName={phaseContrast ? imageBaseName : null}
-        onImageLoad={handleImageLoad}
-        onConfigLoad={setPattern}
-        onCalibrationLoad={setCalibration}
-      />
+      <Header />
       <div className="flex flex-1 min-h-0">
         <UnifiedCanvas
           ref={canvasRef}
@@ -160,6 +155,10 @@ function App() {
           detectedPoints={detectedPoints}
         />
         <Sidebar
+          imageBaseName={phaseContrast ? imageBaseName : null}
+          onImageLoad={handleImageLoad}
+          onConfigLoad={setPattern}
+          onCalibrationLoad={setCalibration}
           calibration={calibration}
           onCalibrationChange={setCalibration}
           pattern={pattern}
