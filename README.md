@@ -353,6 +353,15 @@ uv run muspot plot \
 - 47 survived all 50 timepoints
 - False positive death rate: ~11% (6/53 cells that were actually present)
 
+### Spot detection — Pos9
+
+![Spot counts Pos9](examples/spot_pos9.png)
+
+- 36 crops (6×6 grid, 154×154 px), 6 timepoints, 3 channels (detection on channel 2)
+- 2216 spots detected across 30 crops (6 crops had zero spots)
+- Most crops show 5–25 spots per frame
+- Slight downward trend over time (possible photobleaching)
+
 ### Expression — HuH7 Pos0
 
 ![Expression Pos0](examples/expression_pos0.jpg)
@@ -381,6 +390,10 @@ examples/
   kill_pos140.png                   # kill curve — control
   kill_pos150.png                   # kill curve — killing 2D
   kill_pos156.png                   # kill curve — killing 3D
+  spot_pos9_bbox.csv                # Pos9 bounding boxes (spot detection)
+  spot_pos9_config.yaml             # muspot detect config for Pos9 (channel 2)
+  spot_pos9_spots.csv               # detected spots (2216 spots, 30 crops, 6 timepoints)
+  spot_pos9.png                     # spot count curves — Pos9
   expression_pos0_bbox.csv          # Pos0 bounding boxes (HuH7)
   expression_pos1_bbox.csv          # Pos1 bounding boxes (HuH7)
   expression_pos0_config.yaml       # muexpression analyze config for Pos0
