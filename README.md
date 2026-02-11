@@ -15,7 +15,7 @@ MCF7 cancer cells adhere to micropatterns printed on glass. CAR-T cells are adde
 ## Pipeline overview
 
 ```
-ND2 ──► mufile convert ──► raw TIFFs ──► mupattern ──► bbox CSV ──► mufile crop ──► crops.zarr
+ND2 ──► mufile convert ──► raw TIFFs ──► muregister ──► bbox CSV ──► mufile crop ──► crops.zarr
                                                         │
                                                         ▼
                                                       musee ──► annotation CSV
@@ -50,13 +50,14 @@ ND2 ──► mufile convert ──► raw TIFFs ──► mupattern ──► b
 
 | Package | Language | Description |
 |---------|----------|-------------|
-| `mupattern/` | React/Vite | Fit a Bravais lattice grid to microscopy images, export bounding-box CSV |
-| `mufile/` | Python CLI | Microscopy file utilities: convert ND2 → TIFF, crop TIFFs → zarr |
+| `mupattern/` | React/Vite | Landing page linking to muregister and musee |
+| `muregister/` | React/Vite | Pattern-to-image registration: fit lattice grid, auto-normalize display, detect cells, export bbox CSV |
+| `mufile/` | Python CLI/GUI | Microscopy file utilities: convert ND2 → TIFF, crop TIFFs → zarr, export movies |
 | `musee/` | React/Vite | Browse crops in the zarr store, annotate cell presence/absence |
 | `mukill/` | Python CLI | Build HuggingFace Dataset, train ResNet-18 classifier, run inference, enforce monotonicity, plot kill curves |
-| `muexpression/` | Python CLI | Measure fluorescence expression per crop over time, plot intensity curves |
+| `muexpression/` | Python CLI/GUI | Measure fluorescence expression per crop over time, plot intensity curves |
 | `muspot/` | Python CLI | Detect fluorescent spots per crop over time using spotiflow, plot spot count curves |
-| `shared/` | React | Shared shadcn/ui components used by mupattern and musee |
+| `shared/` | React | Shared shadcn/ui components used by mupattern, muregister, and musee |
 
 ## Prerequisites
 
@@ -66,12 +67,12 @@ ND2 ──► mufile convert ──► raw TIFFs ──► mupattern ──► b
 
 ## Step-by-step guide
 
-### 1. Fit the pattern grid (mupattern)
+### 1. Fit the pattern grid (muregister)
 
 Open the web app and load a phase contrast image from your microscopy data (any single timepoint, e.g. `t=0`).
 
 ```bash
-cd mupattern
+cd muregister
 bun install
 bun run dev
 # open http://localhost:5173
@@ -79,7 +80,7 @@ bun run dev
 
 In the app:
 
-1. **Load image**: drag-and-drop a TIF/PNG from your position folder
+1. **Load image**: drag-and-drop a TIF/PNG from your position folder. Images are auto-normalized for display; detection uses original pixel values.
 2. **Set calibration**: pick the objective preset (10x, 20x, 40x) or type µm/pixel
 3. **Configure lattice**: set parameters `a`, `b`, `α`, `β`, and square size to match the micropattern geometry. Use "Square" or "Hex" presets if applicable
 4. **Auto-detect** (optional): click "Detect cells" to find grid points (shown as green crosses), then click "Auto square (a=b)" or "Auto hex (a=b)" to fit the lattice. Works best on clear phase contrast images with regular spacing
@@ -129,7 +130,7 @@ uv run mufile crop \
 
 - `--input` is the **parent** directory containing `Pos{N}/` subdirectories
 - `--pos` is the position number (e.g. `150` reads from `Pos150/`)
-- `--bbox` is the CSV exported by mupattern
+- `--bbox` is the CSV exported by muregister
 - `--output` is the zarr store path (created if it doesn't exist, appended if it does)
 - `--background` / `--no-background` — whether to compute per-frame background (median of pixels outside all crop bounding boxes), stored in the zarr store
 
@@ -401,7 +402,7 @@ uvx --from huggingface_hub hf download keejkrej/mupattern-resnet18 --local-dir .
 
 ## File formats
 
-### Bounding box CSV (mupattern → mufile crop)
+### Bounding box CSV (muregister → mufile crop)
 
 ```csv
 crop,x,y,w,h
@@ -450,14 +451,34 @@ sources:
     crop_range: [0, 125]   # [start, end), optional
 ```
 
+## GUI executables
+
+`mufile` and `muexpression` include GUI apps (CustomTkinter) for users who prefer a graphical interface.
+
+**Run from source:**
+
+```bash
+uv run mufile-gui
+uv run muexpression-gui
+```
+
+**Build standalone executables** (Windows, no Python install required):
+
+```bash
+uv run pyinstaller mufile_gui.spec --noconfirm
+uv run pyinstaller muexpression_gui.spec --noconfirm
+```
+
+Outputs: `dist/mufile-gui.exe` and `dist/muexpression-gui.exe`. These bundles do not include PyTorch.
+
 ## Development
 
 ```bash
 # Install JS dependencies (from repo root)
 bun install
 
-# Run mupattern
-cd mupattern && bun run dev
+# Run muregister
+cd muregister && bun run dev
 
 # Run musee
 cd musee && bun run dev
@@ -471,7 +492,7 @@ uv run muspot --help
 
 ## Tech stack
 
-- **mupattern / musee**: React 18, TypeScript, Vite, Tailwind CSS 4, shadcn/ui, HTML5 Canvas, File System Access API
+- **mupattern / muregister / musee**: React 18, TypeScript, Vite, Tailwind CSS 4, shadcn/ui, HTML5 Canvas, File System Access API
 - **mufile**: Python, typer, zarr v2, tifffile, numpy, nd2
 - **mukill**: Python, typer, transformers (HuggingFace), torch, zarr v2, datasets, evaluate, pandas, matplotlib
 - **muexpression**: Python, typer, zarr v2, numpy, pandas, matplotlib

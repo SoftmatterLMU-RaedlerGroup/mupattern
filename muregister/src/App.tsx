@@ -25,6 +25,7 @@ import {
 } from "@/store"
 import { detectGridPoints, fitGrid } from "@/lib/autodetect"
 import { pixelsToUm } from "@/lib/units"
+import { normalizeImageDataForDisplay } from "@/lib/normalize"
 
 /** Convert a data URL to an HTMLImageElement (async). */
 function useImageFromDataURL(dataURL: string | null): HTMLImageElement | null {
@@ -41,6 +42,29 @@ function useImageFromDataURL(dataURL: string | null): HTMLImageElement | null {
   }, [dataURL])
 
   return img
+}
+
+/** Normalize phase contrast once; returns canvas with mutated (in-place) normalized pixels. Used for display and detection. */
+function useNormalizedPhaseContrast(phaseContrast: HTMLImageElement | null): HTMLCanvasElement | null {
+  const [normalized, setNormalized] = useState<HTMLCanvasElement | null>(null)
+
+  useEffect(() => {
+    if (!phaseContrast) {
+      setNormalized(null)
+      return
+    }
+    const canvas = document.createElement("canvas")
+    canvas.width = phaseContrast.width
+    canvas.height = phaseContrast.height
+    const ctx = canvas.getContext("2d")!
+    ctx.drawImage(phaseContrast, 0, 0)
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    normalizeImageDataForDisplay(imgData)
+    ctx.putImageData(imgData, 0, 0)
+    setNormalized(canvas)
+  }, [phaseContrast])
+
+  return normalized
 }
 
 /** Convert an HTMLImageElement to a data URL. */
@@ -67,6 +91,7 @@ function App() {
   const detectedPoints = useStore(appStore, (s) => s.detectedPoints)
 
   const phaseContrast = useImageFromDataURL(imageDataURL)
+  const normalizedPhaseContrast = useNormalizedPhaseContrast(phaseContrast)
 
   const patternPx = useMemo(
     () => patternToPixels(pattern, calibration),
@@ -103,13 +128,13 @@ function App() {
   }, [])
 
   const handleDetect = useCallback(() => {
-    if (!phaseContrast) return
-    const points = detectGridPoints(phaseContrast, 5)
+    if (!normalizedPhaseContrast) return
+    const points = detectGridPoints(normalizedPhaseContrast, 5)
     if (points.length < 3) {
       alert(`Detection found only ${points.length} point(s) — need at least 3. Try a different image.`)
     }
     setDetectedPoints(points)
-  }, [phaseContrast])
+  }, [normalizedPhaseContrast])
 
   const handleFitGrid = useCallback((basisAngle: number) => {
     if (!detectedPoints || detectedPoints.length < 3) return
@@ -142,7 +167,7 @@ function App() {
       <div className="flex flex-1 min-h-0">
         <UnifiedCanvas
           ref={canvasRef}
-          phaseContrast={phaseContrast}
+          displayImage={normalizedPhaseContrast}
           canvasSize={canvasSize}
           imageBaseName={imageBaseName}
           patternPx={patternPx}

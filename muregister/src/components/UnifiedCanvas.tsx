@@ -3,7 +3,8 @@ import { useTheme } from "@/components/ThemeProvider"
 import type { PatternPixels, Transform } from "@/types"
 
 interface UnifiedCanvasProps {
-  phaseContrast: HTMLImageElement | null
+  /** Pre-normalized phase contrast (canvas); drawn as-is, no per-frame normalization. */
+  displayImage: HTMLCanvasElement | null
   canvasSize: { width: number; height: number }
   imageBaseName: string
   patternPx: PatternPixels
@@ -23,7 +24,7 @@ export interface UnifiedCanvasRef {
 }
 
 export const UnifiedCanvas = forwardRef<UnifiedCanvasRef, UnifiedCanvasProps>(
-  function UnifiedCanvas({ phaseContrast, canvasSize, imageBaseName, patternPx, transform, onTransformUpdate, onZoom, onRotate, sensitivity, onExportYAML, detectedPoints }, ref) {
+  function UnifiedCanvas({ displayImage, canvasSize, imageBaseName, patternPx, transform, onTransformUpdate, onZoom, onRotate, sensitivity, onExportYAML, detectedPoints }, ref) {
     const { theme } = useTheme()
     const canvasRef = useRef<HTMLCanvasElement>(null)
     type DragMode = "none" | "pan" | "rotate" | "resize"
@@ -183,9 +184,8 @@ export const UnifiedCanvas = forwardRef<UnifiedCanvasRef, UnifiedCanvasProps>(
       ctx.fillStyle = theme === "dark" ? "#262626" : "#ffffff"
       ctx.fillRect(0, 0, canvas.width, canvas.height)
 
-      // Draw phase contrast as fixed background
-      if (phaseContrast) {
-        ctx.drawImage(phaseContrast, 0, 0, canvas.width, canvas.height)
+      if (displayImage) {
+        ctx.drawImage(displayImage, 0, 0, canvas.width, canvas.height)
       }
 
       // Draw pattern overlay with transform
@@ -207,7 +207,7 @@ export const UnifiedCanvas = forwardRef<UnifiedCanvasRef, UnifiedCanvasProps>(
         }
         ctx.restore()
       }
-    }, [phaseContrast, patternPx, transform, drawLattice, theme, detectedPoints])
+    }, [displayImage, patternPx, transform, drawLattice, theme, detectedPoints])
 
     useEffect(() => {
       draw()

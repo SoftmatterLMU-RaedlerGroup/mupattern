@@ -543,9 +543,12 @@ export function fitGrid(
   return { a, alpha, b: a, beta, tx, ty }
 }
 
-/** Orchestrator: detect grid point candidates from a phase contrast image. */
+/**
+ * Detect grid point candidates from a phase contrast image.
+ * Accepts normalized or unnormalized; min-max stretch preserves relative structure.
+ */
 export function detectGridPoints(
-  image: HTMLImageElement,
+  image: HTMLImageElement | HTMLCanvasElement,
   radius: number = 5,
 ): Array<{ x: number; y: number }> {
   const canvas = document.createElement("canvas")
