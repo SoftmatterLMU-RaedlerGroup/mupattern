@@ -9,4 +9,3 @@
 - **Root** `pyproject.toml` defines a uv workspace; Python packages: `mufile`, `muexpression`, `muspot`, `mukill`
 - Run Python CLIs from repo root: `uv run mufile --help`, `uv run mukill --help`, etc.
 - JS app: `mupattern` — unified web app (workspace, register, see); run with `bun run dev` from that directory
-- `shared/` — React components used by mupattern
