@@ -33,10 +33,12 @@ def run_analyze(
     for i, crop_id in enumerate(crop_ids):
         arr = crop_grp[crop_id]
         n_times = arr.shape[0]
+        n_pixels = arr.shape[3] * arr.shape[4]  # h * w
 
         for t in range(n_times):
             intensity = int(np.array(arr[t, channel, 0]).sum())
-            background = float(bg_arr[t, channel, 0])
+            bg_per_pixel = float(bg_arr[t, channel, 0])
+            background = bg_per_pixel * n_pixels
             rows.append((t, crop_id, intensity, background))
 
         if on_progress and total > 0:
