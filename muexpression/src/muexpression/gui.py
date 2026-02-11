@@ -14,7 +14,8 @@ ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 
-def _browse_dir(parent: ctk.CTkFrame, entry: ctk.CTkEntry, title: str = "Select directory") -> None:
+def _browse_dir(parent, entry: ctk.CTkEntry, title: str = "Select directory") -> None:
+    """Parent must be root/toplevel window for native dialog to display correctly (e.g. in frozen builds)."""
     path = fd.askdirectory(title=title, parent=parent)
     if path:
         entry.delete(0, "end")
@@ -22,8 +23,9 @@ def _browse_dir(parent: ctk.CTkFrame, entry: ctk.CTkEntry, title: str = "Select 
 
 
 def _browse_file(
-    parent: ctk.CTkFrame, entry: ctk.CTkEntry, title: str = "Select file", filetypes: list[tuple[str, str]] | None = None
+    parent, entry: ctk.CTkEntry, title: str = "Select file", filetypes: list[tuple[str, str]] | None = None
 ) -> None:
+    """Parent must be root/toplevel window for native dialog to display correctly (e.g. in frozen builds)."""
     path = fd.askopenfilename(title=title, parent=parent, filetypes=filetypes)
     if path:
         entry.delete(0, "end")
@@ -31,8 +33,9 @@ def _browse_file(
 
 
 def _browse_file_save(
-    parent: ctk.CTkFrame, entry: ctk.CTkEntry, title: str = "Save file", filetypes: list[tuple[str, str]] | None = None
+    parent, entry: ctk.CTkEntry, title: str = "Save file", filetypes: list[tuple[str, str]] | None = None
 ) -> None:
+    """Parent must be root/toplevel window for native dialog to display correctly (e.g. in frozen builds)."""
     path = fd.asksaveasfilename(title=title, parent=parent, filetypes=filetypes)
     if path:
         entry.delete(0, "end")
@@ -124,7 +127,7 @@ class MuexpressionGUI(ctk.CTk):
 
         self.analyze_zarr = ctk.CTkEntry(tab, placeholder_text="Path to crops.zarr")
         add_row("Zarr path:", self.analyze_zarr)
-        ctk.CTkButton(tab, text="Browse", width=80, command=lambda: _browse_dir(tab, self.analyze_zarr)).grid(
+        ctk.CTkButton(tab, text="Browse", width=80, command=lambda: _browse_dir(self, self.analyze_zarr)).grid(
             row=row - 1, column=2, padx=10, pady=6
         )
 
@@ -140,7 +143,7 @@ class MuexpressionGUI(ctk.CTk):
             tab,
             text="Browse",
             width=80,
-            command=lambda: _browse_file_save(tab, self.analyze_output, filetypes=[("CSV", "*.csv")]),
+            command=lambda: _browse_file_save(self, self.analyze_output, filetypes=[("CSV", "*.csv")]),
         ).grid(row=row - 1, column=2, padx=10, pady=6)
 
         def run_analyze_cmd():
@@ -188,7 +191,7 @@ class MuexpressionGUI(ctk.CTk):
         self.plot_input = ctk.CTkEntry(tab, placeholder_text="expression.csv")
         add_row("Input CSV:", self.plot_input)
         ctk.CTkButton(
-            tab, text="Browse", width=80, command=lambda: _browse_file(tab, self.plot_input, filetypes=[("CSV", "*.csv")])
+            tab, text="Browse", width=80, command=lambda: _browse_file(self, self.plot_input, filetypes=[("CSV", "*.csv")])
         ).grid(row=row - 1, column=2, padx=10, pady=6)
 
         self.plot_output = ctk.CTkEntry(tab, placeholder_text="expression.png")
@@ -197,7 +200,7 @@ class MuexpressionGUI(ctk.CTk):
             tab,
             text="Browse",
             width=80,
-            command=lambda: _browse_file_save(tab, self.plot_output, filetypes=[("PNG", "*.png")]),
+            command=lambda: _browse_file_save(self, self.plot_output, filetypes=[("PNG", "*.png")]),
         ).grid(row=row - 1, column=2, padx=10, pady=6)
 
         def run_plot_cmd():

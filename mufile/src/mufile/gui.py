@@ -14,7 +14,8 @@ ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 
-def _browse_dir(parent: ctk.CTkFrame, entry: ctk.CTkEntry, title: str = "Select directory") -> None:
+def _browse_dir(parent, entry: ctk.CTkEntry, title: str = "Select directory") -> None:
+    """Parent must be root/toplevel window for native dialog to display correctly (e.g. in frozen builds)."""
     path = fd.askdirectory(title=title, parent=parent)
     if path:
         entry.delete(0, "end")
@@ -22,8 +23,9 @@ def _browse_dir(parent: ctk.CTkFrame, entry: ctk.CTkEntry, title: str = "Select 
 
 
 def _browse_file(
-    parent: ctk.CTkFrame, entry: ctk.CTkEntry, title: str = "Select file", filetypes: list[tuple[str, str]] | None = None
+    parent, entry: ctk.CTkEntry, title: str = "Select file", filetypes: list[tuple[str, str]] | None = None
 ) -> None:
+    """Parent must be root/toplevel window for native dialog to display correctly (e.g. in frozen builds)."""
     path = fd.askopenfilename(title=title, parent=parent, filetypes=filetypes)
     if path:
         entry.delete(0, "end")
@@ -31,8 +33,9 @@ def _browse_file(
 
 
 def _browse_file_save(
-    parent: ctk.CTkFrame, entry: ctk.CTkEntry, title: str = "Save file", filetypes: list[tuple[str, str]] | None = None
+    parent, entry: ctk.CTkEntry, title: str = "Save file", filetypes: list[tuple[str, str]] | None = None
 ) -> None:
+    """Parent must be root/toplevel window for native dialog to display correctly (e.g. in frozen builds)."""
     path = fd.asksaveasfilename(title=title, parent=parent, filetypes=filetypes, defaultextension=".mp4")
     if path:
         entry.delete(0, "end")
@@ -126,7 +129,7 @@ class MufileGUI(ctk.CTk):
 
         self.crop_input_dir = ctk.CTkEntry(tab, placeholder_text="Root folder with Pos* subdirs")
         add_row("Input dir:", self.crop_input_dir)
-        btn_in = ctk.CTkButton(tab, text="Browse", width=80, command=lambda: _browse_dir(tab, self.crop_input_dir))
+        btn_in = ctk.CTkButton(tab, text="Browse", width=80, command=lambda: _browse_dir(self, self.crop_input_dir))
         btn_in.grid(row=row - 1, column=2, padx=10, pady=6)
 
         self.crop_pos = ctk.CTkEntry(tab, placeholder_text="e.g. 150")
@@ -134,12 +137,12 @@ class MufileGUI(ctk.CTk):
 
         self.crop_bbox = ctk.CTkEntry(tab, placeholder_text="Bounding box CSV")
         add_row("Bbox CSV:", self.crop_bbox)
-        btn_bbox = ctk.CTkButton(tab, text="Browse", width=80, command=lambda: _browse_file(tab, self.crop_bbox))
+        btn_bbox = ctk.CTkButton(tab, text="Browse", width=80, command=lambda: _browse_file(self, self.crop_bbox, filetypes=[("CSV", "*.csv")]))
         btn_bbox.grid(row=row - 1, column=2, padx=10, pady=6)
 
         self.crop_output = ctk.CTkEntry(tab, placeholder_text="crops.zarr")
         add_row("Output:", self.crop_output)
-        btn_out = ctk.CTkButton(tab, text="Browse", width=80, command=lambda: _browse_dir(tab, self.crop_output, "Output directory"))
+        btn_out = ctk.CTkButton(tab, text="Browse", width=80, command=lambda: _browse_dir(self, self.crop_output, "Output directory"))
         btn_out.grid(row=row - 1, column=2, padx=10, pady=6)
 
         self.crop_background = ctk.CTkCheckBox(tab, text="Compute background (median outside crops)")
@@ -200,7 +203,7 @@ class MufileGUI(ctk.CTk):
         self.convert_input = ctk.CTkEntry(tab, placeholder_text="Path to .nd2 file")
         add_row("ND2 file:", self.convert_input)
         btn = ctk.CTkButton(
-            tab, text="Browse", width=80, command=lambda: _browse_file(tab, self.convert_input, filetypes=[("ND2", "*.nd2")])
+            tab, text="Browse", width=80, command=lambda: _browse_file(self, self.convert_input, filetypes=[("ND2", "*.nd2")])
         )
         btn.grid(row=row - 1, column=2, padx=10, pady=6)
 
@@ -212,7 +215,7 @@ class MufileGUI(ctk.CTk):
 
         self.convert_output = ctk.CTkEntry(tab, placeholder_text="Output directory")
         add_row("Output dir:", self.convert_output)
-        btn_out = ctk.CTkButton(tab, text="Browse", width=80, command=lambda: _browse_dir(tab, self.convert_output))
+        btn_out = ctk.CTkButton(tab, text="Browse", width=80, command=lambda: _browse_dir(self, self.convert_output))
         btn_out.grid(row=row - 1, column=2, padx=10, pady=6)
 
         def run_convert_cmd():
@@ -260,7 +263,7 @@ class MufileGUI(ctk.CTk):
 
         self.movie_input = ctk.CTkEntry(tab, placeholder_text="Path to zarr store")
         add_row("Zarr path:", self.movie_input)
-        ctk.CTkButton(tab, text="Browse", width=80, command=lambda: _browse_dir(tab, self.movie_input)).grid(
+        ctk.CTkButton(tab, text="Browse", width=80, command=lambda: _browse_dir(self, self.movie_input)).grid(
             row=row - 1, column=2, padx=10, pady=6
         )
 
@@ -282,7 +285,7 @@ class MufileGUI(ctk.CTk):
             tab,
             text="Browse",
             width=80,
-            command=lambda: _browse_file_save(tab, self.movie_output, filetypes=[("MP4", "*.mp4")]),
+            command=lambda: _browse_file_save(self, self.movie_output, filetypes=[("MP4", "*.mp4")]),
         ).grid(row=row - 1, column=2, padx=10, pady=6)
 
         self.movie_fps = ctk.CTkEntry(tab, placeholder_text="e.g. 10")
@@ -297,7 +300,7 @@ class MufileGUI(ctk.CTk):
             tab,
             text="Browse",
             width=80,
-            command=lambda: _browse_file(tab, self.movie_spots, filetypes=[("CSV", "*.csv")]),
+            command=lambda: _browse_file(self, self.movie_spots, filetypes=[("CSV", "*.csv")]),
         ).grid(row=row - 1, column=2, padx=10, pady=6)
 
         def run_movie_cmd():

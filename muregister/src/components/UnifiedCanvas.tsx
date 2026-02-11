@@ -1,5 +1,6 @@
 import { useRef, useEffect, useCallback, useImperativeHandle, forwardRef } from "react"
 import { useTheme } from "@/components/ThemeProvider"
+import { normalizeImageDataForDisplay } from "@/lib/normalize"
 import type { PatternPixels, Transform } from "@/types"
 
 interface UnifiedCanvasProps {
@@ -183,9 +184,17 @@ export const UnifiedCanvas = forwardRef<UnifiedCanvasRef, UnifiedCanvasProps>(
       ctx.fillStyle = theme === "dark" ? "#262626" : "#ffffff"
       ctx.fillRect(0, 0, canvas.width, canvas.height)
 
-      // Draw phase contrast as fixed background
+      // Draw phase contrast as fixed background (auto-normalized for display; detection uses original)
       if (phaseContrast) {
-        ctx.drawImage(phaseContrast, 0, 0, canvas.width, canvas.height)
+        const off = document.createElement("canvas")
+        off.width = phaseContrast.width
+        off.height = phaseContrast.height
+        const offCtx = off.getContext("2d")!
+        offCtx.drawImage(phaseContrast, 0, 0)
+        const imgData = offCtx.getImageData(0, 0, off.width, off.height)
+        normalizeImageDataForDisplay(imgData)
+        offCtx.putImageData(imgData, 0, 0)
+        ctx.drawImage(off, 0, 0, canvas.width, canvas.height)
       }
 
       // Draw pattern overlay with transform

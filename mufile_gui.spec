@@ -2,13 +2,15 @@
 # PyInstaller spec for mufile GUI. No PyTorch.
 # Build from repo root: uv run pyinstaller mufile_gui.spec
 
+from PyInstaller.utils.hooks import copy_metadata
+
 block_cipher = None
 
 a = Analysis(
     ["scripts/mufile_gui_entry.py"],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=copy_metadata("imageio"),
     hiddenimports=[
         "mufile",
         "mufile.core",
