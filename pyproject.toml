@@ -11,7 +11,7 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "pyinstaller>=6"]
 
 [tool.uv.workspace]
 members = ["mufile", "muexpression", "muspot", "mukill"]
