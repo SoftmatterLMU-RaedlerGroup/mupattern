@@ -12,7 +12,7 @@ interface UnifiedCanvasProps {
   onTransformUpdate: (updates: Partial<Transform>) => void
   onZoom: (factor: number) => void
   onRotate: (deltaRad: number) => void
-  sensitivity: number
+  patternOpacity: number
   onExportYAML?: () => void
   detectedPoints?: Array<{ x: number; y: number }> | null
 }
@@ -43,7 +43,7 @@ interface LatticeDrawStats {
 }
 
 export const UnifiedCanvas = forwardRef<UnifiedCanvasRef, UnifiedCanvasProps>(
-  function UnifiedCanvas({ displayImage, canvasSize, imageBaseName, patternPx, transform, onTransformUpdate, onZoom, onRotate, sensitivity, onExportYAML, detectedPoints }, ref) {
+  function UnifiedCanvas({ displayImage, canvasSize, imageBaseName, patternPx, transform, onTransformUpdate, onZoom, onRotate, patternOpacity, onExportYAML, detectedPoints }, ref) {
     const { theme } = useTheme()
     const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -111,7 +111,9 @@ export const UnifiedCanvas = forwardRef<UnifiedCanvasRef, UnifiedCanvasProps>(
       ctx.save()
       ctx.translate(cx + tx.tx, cy + tx.ty)
 
-      ctx.fillStyle = options.mode === "preview" ? "rgba(59, 130, 246, 0.7)" : "#ffffff"
+      ctx.fillStyle = options.mode === "preview"
+        ? `rgba(59, 130, 246, ${Math.max(0, Math.min(1, patternOpacity))})`
+        : "#ffffff"
 
       let drawnRects = 0
       for (let i = -maxRange; i <= maxRange; i += stride) {
@@ -226,7 +228,7 @@ export const UnifiedCanvas = forwardRef<UnifiedCanvasRef, UnifiedCanvasProps>(
         stride,
         capped: stride > 1,
       }
-    }, [])
+    }, [patternOpacity])
 
     const flushStoreSync = useCallback((force: boolean) => {
       const now = performance.now()
@@ -519,11 +521,9 @@ export const UnifiedCanvas = forwardRef<UnifiedCanvasRef, UnifiedCanvasProps>(
       const dy = e.clientY - lastPos.current.y
       lastPos.current = { x: e.clientX, y: e.clientY }
 
-      const s = Math.pow(10, (sensitivity - 0.5) * 2)
-
       switch (dragMode.current) {
         case "rotate": {
-          const delta = dx * 0.003 * s
+          const delta = dx * 0.003
           pendingRotateDeltaRef.current += delta
           previewPatternRef.current = {
             ...previewPatternRef.current,
@@ -536,7 +536,7 @@ export const UnifiedCanvas = forwardRef<UnifiedCanvasRef, UnifiedCanvasProps>(
           break
         }
         case "resize": {
-          const factor = Math.max(0.01, 1 + dx * 0.002 * s)
+          const factor = Math.max(0.01, 1 + dx * 0.002)
           pendingZoomFactorRef.current *= factor
           previewPatternRef.current = {
             ...previewPatternRef.current,
@@ -561,7 +561,7 @@ export const UnifiedCanvas = forwardRef<UnifiedCanvasRef, UnifiedCanvasProps>(
 
       requestRender()
       flushStoreSync(false)
-    }, [sensitivity, requestRender, flushStoreSync])
+    }, [requestRender, flushStoreSync])
 
     const handlePointerUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
       if (activePointerId.current !== e.pointerId) return

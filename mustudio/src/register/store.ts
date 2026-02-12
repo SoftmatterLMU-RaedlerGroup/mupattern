@@ -18,8 +18,7 @@ export interface AppState {
   pattern: PatternConfigUm
   transform: Transform
   calibration: Calibration
-  sensitivity: number
-  allowDensePreview: boolean
+  patternOpacity: number
   detectedPoints: Array<{ x: number; y: number }> | null
 }
 
@@ -31,8 +30,7 @@ const defaultState: AppState = {
   pattern: DEFAULT_PATTERN_UM,
   transform: DEFAULT_TRANSFORM,
   calibration: DEFAULT_CALIBRATION,
-  sensitivity: 0.5,
-  allowDensePreview: false,
+  patternOpacity: 0.7,
   detectedPoints: null,
 }
 
@@ -60,7 +58,9 @@ export const appStore = createPersistedStore<AppState>("mustudio-register-app", 
       },
       transform: { ...defaultState.transform, ...(persisted.transform ?? {}) },
       calibration: { ...defaultState.calibration, ...(persisted.calibration ?? {}) },
-      allowDensePreview: persisted.allowDensePreview ?? false,
+      patternOpacity: typeof persisted.patternOpacity === "number"
+        ? Math.max(0, Math.min(1, persisted.patternOpacity))
+        : defaultState.patternOpacity,
     }
   },
 })
@@ -100,8 +100,6 @@ export function setPattern(pattern: PatternConfigUm) {
   appStore.setState((s) => ({
     ...s,
     pattern,
-    allowDensePreview:
-      s.allowDensePreview || pattern.lattice.a < 10 || pattern.lattice.b < 10,
   }))
 }
 
@@ -109,10 +107,6 @@ export function updateLattice(updates: Partial<Lattice>) {
   appStore.setState((s) => ({
     ...s,
     pattern: { ...s.pattern, lattice: { ...s.pattern.lattice, ...updates } },
-    allowDensePreview:
-      s.allowDensePreview ||
-      (updates.a ?? s.pattern.lattice.a) < 10 ||
-      (updates.b ?? s.pattern.lattice.b) < 10,
   }))
 }
 
@@ -143,10 +137,6 @@ export function scalePattern(factor: number) {
       width: s.pattern.width * factor,
       height: s.pattern.height * factor,
     },
-    allowDensePreview:
-      s.allowDensePreview ||
-      s.pattern.lattice.a * factor < 10 ||
-      s.pattern.lattice.b * factor < 10,
   }))
 }
 
@@ -177,12 +167,8 @@ export function setCalibration(cal: Calibration) {
   }
 }
 
-export function setSensitivity(sensitivity: number) {
-  appStore.setState((s) => ({ ...s, sensitivity }))
-}
-
-export function setAllowDensePreview(allowDensePreview: boolean) {
-  appStore.setState((s) => ({ ...s, allowDensePreview }))
+export function setPatternOpacity(patternOpacity: number) {
+  appStore.setState((s) => ({ ...s, patternOpacity: Math.max(0, Math.min(1, patternOpacity)) }))
 }
 
 export function resetPatternAndTransform() {

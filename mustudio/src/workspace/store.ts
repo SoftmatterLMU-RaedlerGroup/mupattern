@@ -2,10 +2,19 @@ import { Store } from "@tanstack/store"
 import { saveHandle, loadHandle, clearHandle } from "@/lib/idb-handle"
 
 /** Single workspace backed by a parent folder with Pos{N}/ subdirectories. */
+export interface PositionTag {
+  id: string
+  label: string
+  startIndex: number
+  endIndex: number
+}
+
 export interface Workspace {
   id: string
   name: string
-  positions: string[]
+  positions: number[]
+  posTags: PositionTag[]
+  positionFilterLabels: string[]
   channels: number[]
   times: number[]
   zSlices: number[]
@@ -40,6 +49,70 @@ function isWorkspaceStoreState(value: unknown): value is WorkspaceStoreState {
   return Array.isArray(candidate.workspaces) && ("activeId" in candidate)
 }
 
+function parsePosFolderName(posName: string): number | null {
+  const m = posName.match(/^Pos(\d+)$/i)
+  return m ? parseInt(m[1], 10) : null
+}
+
+function normalizePositionValue(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+    return Math.floor(value)
+  }
+  if (typeof value === "string") {
+    const parsedFolder = parsePosFolderName(value)
+    if (parsedFolder != null) return parsedFolder
+    if (/^\d+$/.test(value)) return parseInt(value, 10)
+  }
+  return null
+}
+
+function normalizeWorkspace(workspace: Workspace): Workspace {
+  const positionsFromState = Array.isArray(workspace.positions)
+    ? workspace.positions.map((value) => normalizePositionValue(value)).filter((value): value is number => value != null)
+    : []
+  const positions = positionsFromState
+  const normalizedMaxIndex = Math.max(0, positions.length - 1)
+  const posTags = Array.isArray(workspace.posTags)
+    ? workspace.posTags
+      .map((tag) => {
+        const label = String(tag.label ?? "").trim()
+        if (!label) return null
+        let startIndex = Math.max(0, Math.min(tag.startIndex, normalizedMaxIndex))
+        let endIndex = Math.max(0, Math.min(tag.endIndex, normalizedMaxIndex))
+        if (startIndex > endIndex) {
+          const tmp = startIndex
+          startIndex = endIndex
+          endIndex = tmp
+        }
+        return {
+          id: String(tag.id ?? crypto.randomUUID()),
+          label,
+          startIndex,
+          endIndex,
+        }
+      })
+      .filter((tag): tag is PositionTag => tag !== null)
+    : []
+
+  const positionFilterLabelsRaw = (() => {
+    const legacy = (workspace as unknown as Record<string, unknown>).positionFilterLabel
+    if (typeof legacy === "string" && legacy.trim()) return [legacy.trim()]
+    const next = (workspace as unknown as Record<string, unknown>).positionFilterLabels
+    if (Array.isArray(next)) return next.map((v) => String(v ?? "").trim()).filter((v) => v.length > 0)
+    return []
+  })()
+  const tagLabelSet = new Set(posTags.map((tag) => tag.label))
+  const positionFilterLabels = [...new Set(positionFilterLabelsRaw)].filter((label) => tagLabelSet.has(label))
+
+  return {
+    ...workspace,
+    positions,
+    posTags,
+    positionFilterLabels,
+    currentIndex: Math.max(0, Math.min(workspace.currentIndex, normalizedMaxIndex)),
+  }
+}
+
 const workspaceStateApi = getWorkspaceStateApi()
 
 export const workspaceStore = new Store<WorkspaceStoreState>(DEFAULT_STATE)
@@ -49,7 +122,11 @@ async function hydrateWorkspaceStoreFromDisk(): Promise<void> {
     const saved = await workspaceStateApi.load()
     if (saved && isWorkspaceStoreState(saved)) {
       // Always start on the workspace landing/list screen after app restart.
-      workspaceStore.setState({ ...saved, activeId: null })
+      workspaceStore.setState({
+        ...saved,
+        workspaces: saved.workspaces.map((workspace) => normalizeWorkspace(workspace)),
+        activeId: null,
+      })
     }
   } catch {
     // ignore disk read failures
@@ -114,21 +191,20 @@ export function buildTifFilename(posNum: number, channel: number, time: number, 
   return `img_channel${String(channel).padStart(3, "0")}_position${String(posNum).padStart(3, "0")}_time${String(time).padStart(9, "0")}_z${String(z).padStart(3, "0")}.tif`
 }
 
-/** Parse position folder name (e.g. "Pos140") -> number (e.g. 140). */
-function parsePosNum(posName: string): number {
-  const m = posName.match(/^Pos(\d+)$/i)
-  return m ? parseInt(m[1], 10) : 0
+export function posDirName(pos: number): string {
+  return `Pos${pos}`
 }
 
 // --- Actions ---
 
 export function addWorkspace(workspace: Workspace, dirHandle: FileSystemDirectoryHandle) {
+  const normalizedWorkspace = normalizeWorkspace(workspace)
   workspaceStore.setState((s) => ({
     ...s,
-    workspaces: [...s.workspaces, workspace],
-    activeId: workspace.id,
+    workspaces: [...s.workspaces, normalizedWorkspace],
+    activeId: normalizedWorkspace.id,
   }))
-  persistDirHandle(workspace.id, dirHandle)
+  persistDirHandle(normalizedWorkspace.id, dirHandle)
 }
 
 export function removeWorkspace(workspaceId: string) {
@@ -176,7 +252,12 @@ export function setCurrentIndex(workspaceId: string, index: number) {
     workspaces: s.workspaces.map((w) => {
       if (w.id !== workspaceId) return w
       const max = w.positions.length - 1
-      return { ...w, currentIndex: Math.max(0, Math.min(index, max)) }
+      const nextIndex = Math.max(0, Math.min(index, max))
+      const visible = getWorkspaceVisiblePositionIndices(w)
+      if (visible.length > 0 && !visible.includes(nextIndex)) {
+        return { ...w, currentIndex: visible[0] }
+      }
+      return { ...w, currentIndex: nextIndex }
     }),
   }))
 }
@@ -186,8 +267,12 @@ export function nextPosition(workspaceId: string) {
     ...s,
     workspaces: s.workspaces.map((w) => {
       if (w.id !== workspaceId) return w
-      const next = Math.min(w.currentIndex + 1, w.positions.length - 1)
-      return { ...w, currentIndex: next }
+      const visible = getWorkspaceVisiblePositionIndices(w)
+      if (visible.length === 0) return w
+      const currentVisible = visible.indexOf(w.currentIndex)
+      if (currentVisible < 0) return { ...w, currentIndex: visible[0] }
+      const nextVisible = Math.min(currentVisible + 1, visible.length - 1)
+      return { ...w, currentIndex: visible[nextVisible] }
     }),
   }))
 }
@@ -197,10 +282,109 @@ export function prevPosition(workspaceId: string) {
     ...s,
     workspaces: s.workspaces.map((w) => {
       if (w.id !== workspaceId) return w
-      const prev = Math.max(w.currentIndex - 1, 0)
-      return { ...w, currentIndex: prev }
+      const visible = getWorkspaceVisiblePositionIndices(w)
+      if (visible.length === 0) return w
+      const currentVisible = visible.indexOf(w.currentIndex)
+      if (currentVisible < 0) return { ...w, currentIndex: visible[0] }
+      const prevVisible = Math.max(currentVisible - 1, 0)
+      return { ...w, currentIndex: visible[prevVisible] }
     }),
   }))
+}
+
+export function addPositionTag(workspaceId: string, label: string, startIndex: number, endIndex: number) {
+  const cleanedLabel = label.trim()
+  if (!cleanedLabel) return
+  workspaceStore.setState((s) => ({
+    ...s,
+    workspaces: s.workspaces.map((w) => {
+      if (w.id !== workspaceId) return w
+      const maxIndex = w.positions.length - 1
+      if (maxIndex < 0) return w
+      let start = Math.max(0, Math.min(startIndex, maxIndex))
+      let end = Math.max(0, Math.min(endIndex, maxIndex))
+      if (start > end) {
+        const tmp = start
+        start = end
+        end = tmp
+      }
+      return {
+        ...w,
+        posTags: [
+          ...w.posTags,
+          { id: crypto.randomUUID(), label: cleanedLabel, startIndex: start, endIndex: end },
+        ],
+      }
+    }),
+  }))
+}
+
+export function removePositionTag(workspaceId: string, tagId: string) {
+  workspaceStore.setState((s) => ({
+    ...s,
+    workspaces: s.workspaces.map((w) => {
+      if (w.id !== workspaceId) return w
+      const posTags = w.posTags.filter((tag) => tag.id !== tagId)
+      const allowed = new Set(posTags.map((tag) => tag.label))
+      const positionFilterLabels = w.positionFilterLabels.filter((label) => allowed.has(label))
+      const next = { ...w, posTags, positionFilterLabels }
+      const visible = getWorkspaceVisiblePositionIndices(next)
+      if (visible.length > 0 && !visible.includes(next.currentIndex)) {
+        return { ...next, currentIndex: visible[0] }
+      }
+      return next
+    }),
+  }))
+}
+
+export function togglePositionTagFilter(workspaceId: string, label: string) {
+  const target = label.trim()
+  if (!target) return
+  workspaceStore.setState((s) => ({
+    ...s,
+    workspaces: s.workspaces.map((w) => {
+      if (w.id !== workspaceId) return w
+      if (!w.posTags.some((tag) => tag.label === target)) return w
+      const already = w.positionFilterLabels.includes(target)
+      const positionFilterLabels = already
+        ? w.positionFilterLabels.filter((v) => v !== target)
+        : [...w.positionFilterLabels, target]
+      const next = { ...w, positionFilterLabels }
+      const visible = getWorkspaceVisiblePositionIndices(next)
+      if (visible.length > 0 && !visible.includes(next.currentIndex)) {
+        return { ...next, currentIndex: visible[0] }
+      }
+      return next
+    }),
+  }))
+}
+
+export function clearPositionTagFilters(workspaceId: string) {
+  workspaceStore.setState((s) => ({
+    ...s,
+    workspaces: s.workspaces.map((w) =>
+      w.id === workspaceId ? { ...w, positionFilterLabels: [] } : w
+    ),
+  }))
+}
+
+export function getWorkspaceVisiblePositionIndices(workspace: Workspace): number[] {
+  const allIndices = workspace.positions.map((_, i) => i)
+  const filterLabels = workspace.positionFilterLabels
+  if (filterLabels.length === 0) return allIndices
+  const uniqueFilterLabels = [...new Set(filterLabels)]
+
+  const visible = allIndices.filter((index) =>
+    uniqueFilterLabels.every((label) =>
+      workspace.posTags.some(
+        (tag) =>
+          tag.label === label &&
+          index >= tag.startIndex &&
+          index <= tag.endIndex
+      )
+    )
+  )
+  return visible
 }
 
 // --- Helpers ---
@@ -215,8 +399,8 @@ export function hasWorkspace(): boolean {
   return getActiveWorkspace() !== null
 }
 
-/** Read a TIF file for the given position folder name, using the active workspace's dimension selections. */
-export async function readPositionImage(posName: string): Promise<File | null> {
+/** Read a TIF file for the given position number, using the active workspace's dimension selections. */
+export async function readPositionImage(posNum: number): Promise<File | null> {
   const ws = getActiveWorkspace()
   if (!ws) return null
 
@@ -224,8 +408,7 @@ export async function readPositionImage(posName: string): Promise<File | null> {
   if (!dirHandle) return null
 
   try {
-    const posHandle = await dirHandle.getDirectoryHandle(posName)
-    const posNum = parsePosNum(posName)
+    const posHandle = await dirHandle.getDirectoryHandle(posDirName(posNum))
     const filename = buildTifFilename(
       posNum,
       ws.selectedChannel,
@@ -243,6 +426,6 @@ export async function readPositionImage(posName: string): Promise<File | null> {
 export async function readCurrentPositionImage(): Promise<File | null> {
   const ws = getActiveWorkspace()
   if (!ws || ws.positions.length === 0) return null
-  const posName = ws.positions[ws.currentIndex]
-  return readPositionImage(posName)
+  const pos = ws.positions[ws.currentIndex]
+  return readPositionImage(pos)
 }

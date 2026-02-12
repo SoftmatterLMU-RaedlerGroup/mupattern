@@ -4,7 +4,15 @@ interface WorkspaceSnapshot {
   workspaces: Array<{
     id: string
     name: string
-    positions: string[]
+    positions: number[]
+    posTags?: Array<{
+      id: string
+      label: string
+      startIndex: number
+      endIndex: number
+    }>
+    positionFilterLabel?: string | null
+    positionFilterLabels?: string[]
     channels: number[]
     times: number[]
     zSlices: number[]

@@ -1,33 +1,17 @@
 import { useCallback, useRef } from "react"
-import { ChevronsUpDown, ImageIcon, FileText } from "lucide-react"
+import { ChevronsUpDown } from "lucide-react"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Separator } from "@/components/ui/separator"
 import { Button } from "@/components/ui/button"
 import { CalibrationControls } from "@/register/components/CalibrationControls"
 import { PatternEditor } from "@/register/components/PatternEditor"
 import { TransformEditor } from "@/register/components/TransformEditor"
-import { ExportButton } from "@/register/components/ExportButton"
 import { Slider } from "@/components/ui/slider"
 import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
-import { parseYAMLConfig } from "@/register/lib/units"
-import * as UTIF from "utif2"
+import { parseYAMLConfig, patternToYAML } from "@/register/lib/units"
 import type { Calibration, Lattice, PatternConfigUm, Transform } from "@/register/types"
 
-const ACCEPTED_TYPES = new Set(["image/png", "image/tiff", "image/tif"])
-const TIFF_TYPES = new Set(["image/tiff", "image/tif"])
-
-function isTiff(file: File): boolean {
-  return TIFF_TYPES.has(file.type) || /\.tiff?$/i.test(file.name)
-}
-
-function stripExtension(filename: string): string {
-  return filename.replace(/\.[^.]+$/, "")
-}
-
 interface SidebarProps {
-  imageBaseName: string | null
-  onImageLoad: (img: HTMLImageElement, filename: string) => void
   onConfigLoad: (config: PatternConfigUm) => void
   onCalibrationLoad: (cal: Calibration) => void
   calibration: Calibration
@@ -36,14 +20,11 @@ interface SidebarProps {
   onLatticeUpdate: (updates: Partial<Lattice>) => void
   onWidthUpdate: (width: number) => void
   onHeightUpdate: (height: number) => void
-  allowDensePreview: boolean
-  onAllowDensePreviewChange: (enabled: boolean) => void
   transform: Transform
   onTransformUpdate: (updates: Partial<Transform>) => void
-  sensitivity: number
-  onSensitivityChange: (v: number) => void
+  patternOpacity: number
+  onPatternOpacityChange: (v: number) => void
   onReset: () => void
-  onExport: () => void
   hasImage: boolean
   hasDetectedPoints: boolean
   onDetect: () => void
@@ -75,8 +56,6 @@ function Section({
 }
 
 export function Sidebar({
-  imageBaseName,
-  onImageLoad,
   onConfigLoad,
   onCalibrationLoad,
   calibration,
@@ -85,62 +64,17 @@ export function Sidebar({
   onLatticeUpdate,
   onWidthUpdate,
   onHeightUpdate,
-  allowDensePreview,
-  onAllowDensePreviewChange,
   transform,
   onTransformUpdate,
-  sensitivity,
-  onSensitivityChange,
+  patternOpacity,
+  onPatternOpacityChange,
   onReset,
-  onExport,
   hasImage,
   hasDetectedPoints,
   onDetect,
   onFitGrid,
 }: SidebarProps) {
-  const imageInputRef = useRef<HTMLInputElement>(null)
   const configInputRef = useRef<HTMLInputElement>(null)
-
-  const handleImageFile = useCallback((file: File) => {
-    const baseName = stripExtension(file.name)
-
-    if (isTiff(file)) {
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        try {
-          const buffer = e.target?.result as ArrayBuffer
-          const ifds = UTIF.decode(buffer)
-          if (ifds.length === 0) return
-          UTIF.decodeImage(buffer, ifds[0])
-          const rgba = UTIF.toRGBA8(ifds[0])
-          const w = ifds[0].width
-          const h = ifds[0].height
-
-          const canvas = document.createElement("canvas")
-          canvas.width = w
-          canvas.height = h
-          const ctx = canvas.getContext("2d")!
-          const imageData = new ImageData(new Uint8ClampedArray(rgba.buffer as ArrayBuffer), w, h)
-          ctx.putImageData(imageData, 0, 0)
-
-          const img = new Image()
-          img.onload = () => onImageLoad(img, baseName)
-          img.src = canvas.toDataURL("image/png")
-        } catch {
-          // silently fail
-        }
-      }
-      reader.readAsArrayBuffer(file)
-    } else if (ACCEPTED_TYPES.has(file.type)) {
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        const img = new Image()
-        img.onload = () => onImageLoad(img, baseName)
-        img.src = e.target?.result as string
-      }
-      reader.readAsDataURL(file)
-    }
-  }, [onImageLoad])
 
   const handleConfigFile = useCallback((file: File) => {
     const reader = new FileReader()
@@ -157,21 +91,49 @@ export function Sidebar({
     reader.readAsText(file)
   }, [onConfigLoad, onCalibrationLoad])
 
+  const handleSaveConfig = useCallback(async () => {
+    const yaml = patternToYAML(pattern, calibration)
+
+    try {
+      if ("showSaveFilePicker" in window) {
+        const handle = await (window as Window & {
+          showSaveFilePicker: (opts: {
+            suggestedName?: string
+            types?: Array<{
+              description?: string
+              accept: Record<string, string[]>
+            }>
+          }) => Promise<FileSystemFileHandle>
+        }).showSaveFilePicker({
+          suggestedName: "registration_config.yaml",
+          types: [
+            {
+              description: "YAML config",
+              accept: { "text/yaml": [".yaml"] },
+            },
+          ],
+        })
+        const writable = await handle.createWritable()
+        await writable.write(yaml)
+        await writable.close()
+        return
+      }
+    } catch {
+      return
+    }
+
+    const blob = new Blob([yaml], { type: "text/yaml" })
+    const link = document.createElement("a")
+    link.download = "registration_config.yaml"
+    link.href = URL.createObjectURL(blob)
+    link.click()
+    URL.revokeObjectURL(link.href)
+  }, [pattern, calibration])
+
   return (
     <aside className="w-80 flex-shrink-0 overflow-y-auto border-l border-border p-4 space-y-1">
-      <Section title="Files">
+      <Section title="Config">
         <div className="space-y-1.5">
-          <input
-            ref={imageInputRef}
-            type="file"
-            accept="image/png,image/tiff,.tif,.tiff"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImageFile(f); e.target.value = "" }}
-            className="hidden"
-          />
-          <Button variant="secondary" size="sm" className="w-full h-7 text-base" onClick={() => imageInputRef.current?.click()}>
-            <ImageIcon className="size-3.5" />
-            {imageBaseName ? `${imageBaseName}` : "Load image"}
-          </Button>
           <input
             ref={configInputRef}
             type="file"
@@ -180,8 +142,13 @@ export function Sidebar({
             className="hidden"
           />
           <Button variant="secondary" size="sm" className="w-full h-7 text-base" onClick={() => configInputRef.current?.click()}>
-            <FileText className="size-3.5" />
             Load config
+          </Button>
+          <Button variant="secondary" size="sm" className="w-full h-7 text-base" onClick={() => { void handleSaveConfig() }}>
+            Save config
+          </Button>
+          <Button variant="secondary" size="sm" className="w-full h-7 text-base" onClick={onReset}>
+            Reset
           </Button>
         </div>
       </Section>
@@ -194,41 +161,30 @@ export function Sidebar({
             calibration={calibration}
             onChange={onCalibrationChange}
           />
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <Label className="text-base">Drag sensitivity</Label>
-              <span className="text-base text-muted-foreground">
-                {sensitivity < 0.3 ? "Fine" : sensitivity > 0.7 ? "Coarse" : "Normal"}
-              </span>
-            </div>
-            <Slider
-              min={0}
-              max={1}
-              step={0.01}
-              value={[sensitivity]}
-              onValueChange={([v]) => onSensitivityChange(v)}
-            />
-          </div>
         </div>
       </Section>
 
       <Separator />
 
       <Section title="Pattern">
-        <div className="mb-3 flex items-center justify-between rounded-md border border-border/60 p-2">
-          <div>
-            <p className="text-sm font-medium">Dense preview mode</p>
-            <p className="text-xs text-muted-foreground">Allows very small lattice spacing (slower).</p>
+        <div className="space-y-1.5 mb-3">
+          <div className="flex items-center justify-between">
+            <Label className="text-base">Pattern opacity</Label>
+            <span className="text-base text-muted-foreground">
+              {Math.round(patternOpacity * 100)}%
+            </span>
           </div>
-          <Switch
-            checked={allowDensePreview}
-            onCheckedChange={onAllowDensePreviewChange}
-            size="sm"
+          <Slider
+            min={0}
+            max={1}
+            step={0.01}
+            value={[patternOpacity]}
+            onValueChange={([v]) => onPatternOpacityChange(v)}
           />
         </div>
         <PatternEditor
           pattern={pattern}
-          latticeMinUm={allowDensePreview ? 1 : 10}
+          latticeMinUm={10}
           onLatticeUpdate={onLatticeUpdate}
           onWidthUpdate={onWidthUpdate}
           onHeightUpdate={onHeightUpdate}
@@ -274,12 +230,6 @@ export function Sidebar({
         >
           Auto hex (a=b)
         </Button>
-        <div className="flex gap-1.5">
-          <Button variant="secondary" size="sm" className="flex-1 h-7 text-base" onClick={onReset}>
-            Reset
-          </Button>
-          <ExportButton onExport={onExport} />
-        </div>
       </div>
 
     </aside>
