@@ -11,9 +11,19 @@ import {
 
 function InitHandles() {
   useEffect(() => {
-    for (const w of workspaceStore.state.workspaces) {
-      if (!getDirHandle(w.id)) restoreDirHandle(w.id).then(() => {})
+    const restored = new Set<string>()
+    const restoreMissingHandles = () => {
+      for (const w of workspaceStore.state.workspaces) {
+        if (restored.has(w.id)) continue
+        restored.add(w.id)
+        if (!getDirHandle(w.id)) {
+          restoreDirHandle(w.id).then(() => {})
+        }
+      }
     }
+
+    restoreMissingHandles()
+    return workspaceStore.subscribe(restoreMissingHandles)
   }, [])
   return null
 }

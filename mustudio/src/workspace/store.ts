@@ -20,35 +20,61 @@ export interface WorkspaceStoreState {
   activeId: string | null
 }
 
-const STORAGE_KEY = "mustudio-workspaces"
+const DEFAULT_STATE: WorkspaceStoreState = { workspaces: [], activeId: null }
 const IDB_PREFIX = "mustudio-ws-"
+let hasHydratedWorkspaceState = false
 
-function loadFromStorage(): WorkspaceStoreState {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return JSON.parse(raw)
-  } catch {
-    // ignore
+function getWorkspaceStateApi() {
+  if (typeof window !== "undefined" && window.mustudio?.workspaceState) {
+    return window.mustudio.workspaceState
   }
-  return { workspaces: [], activeId: null }
-}
-
-function saveToStorage(state: WorkspaceStoreState) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
-  } catch {
-    // ignore
+  return {
+    load: async (): Promise<WorkspaceStoreState | null> => null,
+    save: async (): Promise<boolean> => false,
   }
 }
 
-export const workspaceStore = new Store<WorkspaceStoreState>(
-  loadFromStorage()
-)
+function isWorkspaceStoreState(value: unknown): value is WorkspaceStoreState {
+  if (!value || typeof value !== "object") return false
+  const candidate = value as Record<string, unknown>
+  return Array.isArray(candidate.workspaces) && ("activeId" in candidate)
+}
+
+const workspaceStateApi = getWorkspaceStateApi()
+
+export const workspaceStore = new Store<WorkspaceStoreState>(DEFAULT_STATE)
+
+async function hydrateWorkspaceStoreFromDisk(): Promise<void> {
+  try {
+    const saved = await workspaceStateApi.load()
+    if (saved && isWorkspaceStoreState(saved)) {
+      // Always start on the workspace landing/list screen after app restart.
+      workspaceStore.setState({ ...saved, activeId: null })
+    }
+  } catch {
+    // ignore disk read failures
+  } finally {
+    hasHydratedWorkspaceState = true
+  }
+}
+
+void hydrateWorkspaceStoreFromDisk()
+
+async function persistWorkspaceStateToDisk(state: WorkspaceStoreState): Promise<void> {
+  try {
+    await workspaceStateApi.save(state)
+  } catch {
+    // ignore disk write failures
+  }
+}
 
 let timer: ReturnType<typeof setTimeout> | null = null
 workspaceStore.subscribe(() => {
+  if (!hasHydratedWorkspaceState) return
   if (timer) clearTimeout(timer)
-  timer = setTimeout(() => saveToStorage(workspaceStore.state), 300)
+  timer = setTimeout(() => {
+    void persistWorkspaceStateToDisk(workspaceStore.state)
+  }, 1200)
 })
 
 // --- In-memory directory handle cache ---

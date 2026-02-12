@@ -9,6 +9,7 @@ import { TransformEditor } from "@/register/components/TransformEditor"
 import { ExportButton } from "@/register/components/ExportButton"
 import { Slider } from "@/components/ui/slider"
 import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
 import { parseYAMLConfig } from "@/register/lib/units"
 import * as UTIF from "utif2"
 import type { Calibration, Lattice, PatternConfigUm, Transform } from "@/register/types"
@@ -35,6 +36,8 @@ interface SidebarProps {
   onLatticeUpdate: (updates: Partial<Lattice>) => void
   onWidthUpdate: (width: number) => void
   onHeightUpdate: (height: number) => void
+  allowDensePreview: boolean
+  onAllowDensePreviewChange: (enabled: boolean) => void
   transform: Transform
   onTransformUpdate: (updates: Partial<Transform>) => void
   sensitivity: number
@@ -82,6 +85,8 @@ export function Sidebar({
   onLatticeUpdate,
   onWidthUpdate,
   onHeightUpdate,
+  allowDensePreview,
+  onAllowDensePreviewChange,
   transform,
   onTransformUpdate,
   sensitivity,
@@ -210,8 +215,20 @@ export function Sidebar({
       <Separator />
 
       <Section title="Pattern">
+        <div className="mb-3 flex items-center justify-between rounded-md border border-border/60 p-2">
+          <div>
+            <p className="text-sm font-medium">Dense preview mode</p>
+            <p className="text-xs text-muted-foreground">Allows very small lattice spacing (slower).</p>
+          </div>
+          <Switch
+            checked={allowDensePreview}
+            onCheckedChange={onAllowDensePreviewChange}
+            size="sm"
+          />
+        </div>
         <PatternEditor
           pattern={pattern}
+          latticeMinUm={allowDensePreview ? 1 : 10}
           onLatticeUpdate={onLatticeUpdate}
           onWidthUpdate={onWidthUpdate}
           onHeightUpdate={onHeightUpdate}

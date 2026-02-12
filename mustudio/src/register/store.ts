@@ -19,6 +19,7 @@ export interface AppState {
   transform: Transform
   calibration: Calibration
   sensitivity: number
+  allowDensePreview: boolean
   detectedPoints: Array<{ x: number; y: number }> | null
 }
 
@@ -31,11 +32,37 @@ const defaultState: AppState = {
   transform: DEFAULT_TRANSFORM,
   calibration: DEFAULT_CALIBRATION,
   sensitivity: 0.5,
+  allowDensePreview: false,
   detectedPoints: null,
 }
 
 export const appStore = createPersistedStore<AppState>("mustudio-register-app", defaultState, {
+  serialize: (state) => ({
+    ...state,
+    // Avoid persisting large base64 payloads that can block the UI thread.
+    imageDataURL: null,
+    started: state.imageDataURL ? false : state.started,
+  }),
   debounceMs: 500,
+  deserialize: (raw) => {
+    const persisted = (raw as Partial<AppState>) ?? {}
+    return {
+      ...defaultState,
+      ...persisted,
+      canvasSize: { ...defaultState.canvasSize, ...(persisted.canvasSize ?? {}) },
+      pattern: {
+        ...defaultState.pattern,
+        ...(persisted.pattern ?? {}),
+        lattice: {
+          ...defaultState.pattern.lattice,
+          ...(persisted.pattern?.lattice ?? {}),
+        },
+      },
+      transform: { ...defaultState.transform, ...(persisted.transform ?? {}) },
+      calibration: { ...defaultState.calibration, ...(persisted.calibration ?? {}) },
+      allowDensePreview: persisted.allowDensePreview ?? false,
+    }
+  },
 })
 
 // --- Actions ---
@@ -70,13 +97,22 @@ export function loadImage(imageDataURL: string, filename: string, width: number,
 }
 
 export function setPattern(pattern: PatternConfigUm) {
-  appStore.setState((s) => ({ ...s, pattern }))
+  appStore.setState((s) => ({
+    ...s,
+    pattern,
+    allowDensePreview:
+      s.allowDensePreview || pattern.lattice.a < 10 || pattern.lattice.b < 10,
+  }))
 }
 
 export function updateLattice(updates: Partial<Lattice>) {
   appStore.setState((s) => ({
     ...s,
     pattern: { ...s.pattern, lattice: { ...s.pattern.lattice, ...updates } },
+    allowDensePreview:
+      s.allowDensePreview ||
+      (updates.a ?? s.pattern.lattice.a) < 10 ||
+      (updates.b ?? s.pattern.lattice.b) < 10,
   }))
 }
 
@@ -107,6 +143,10 @@ export function scalePattern(factor: number) {
       width: s.pattern.width * factor,
       height: s.pattern.height * factor,
     },
+    allowDensePreview:
+      s.allowDensePreview ||
+      s.pattern.lattice.a * factor < 10 ||
+      s.pattern.lattice.b * factor < 10,
   }))
 }
 
@@ -139,6 +179,10 @@ export function setCalibration(cal: Calibration) {
 
 export function setSensitivity(sensitivity: number) {
   appStore.setState((s) => ({ ...s, sensitivity }))
+}
+
+export function setAllowDensePreview(allowDensePreview: boolean) {
+  appStore.setState((s) => ({ ...s, allowDensePreview }))
 }
 
 export function resetPatternAndTransform() {

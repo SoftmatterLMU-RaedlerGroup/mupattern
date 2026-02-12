@@ -19,13 +19,14 @@ import {
   updateTransform,
   setCalibration,
   setSensitivity,
+  setAllowDensePreview,
   resetPatternAndTransform,
   setDetectedPoints,
   clearDetectedPoints,
 } from "@/register/store"
 import { detectGridPoints, fitGrid } from "@/register/lib/autodetect"
 import { pixelsToUm } from "@/register/lib/units"
-import { normalizeImageDataForDisplay } from "@/register/lib/normalize"
+import { normalizeImageDataForDisplayAsync } from "@/register/lib/normalize"
 
 /** Convert a data URL to an HTMLImageElement (async). */
 function useImageFromDataURL(dataURL: string | null): HTMLImageElement | null {
@@ -39,6 +40,11 @@ function useImageFromDataURL(dataURL: string | null): HTMLImageElement | null {
     const image = new Image()
     image.onload = () => setImg(image)
     image.src = dataURL
+    return () => {
+      if (dataURL.startsWith("blob:")) {
+        URL.revokeObjectURL(dataURL)
+      }
+    }
   }, [dataURL])
 
   return img
@@ -49,19 +55,34 @@ function useNormalizedPhaseContrast(phaseContrast: HTMLImageElement | null): HTM
   const [normalized, setNormalized] = useState<HTMLCanvasElement | null>(null)
 
   useEffect(() => {
+    let cancelled = false
     if (!phaseContrast) {
       setNormalized(null)
       return
     }
-    const canvas = document.createElement("canvas")
-    canvas.width = phaseContrast.width
-    canvas.height = phaseContrast.height
-    const ctx = canvas.getContext("2d")!
-    ctx.drawImage(phaseContrast, 0, 0)
-    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-    normalizeImageDataForDisplay(imgData)
-    ctx.putImageData(imgData, 0, 0)
-    setNormalized(canvas)
+
+    const run = async () => {
+      const canvas = document.createElement("canvas")
+      canvas.width = phaseContrast.width
+      canvas.height = phaseContrast.height
+      const ctx = canvas.getContext("2d")!
+      ctx.drawImage(phaseContrast, 0, 0)
+      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      const normalizedData = await normalizeImageDataForDisplayAsync(imgData)
+      if (cancelled) return
+      ctx.putImageData(normalizedData, 0, 0)
+      setNormalized(canvas)
+    }
+
+    run().catch(() => {
+      if (!cancelled) {
+        setNormalized(null)
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
   }, [phaseContrast])
 
   return normalized
@@ -88,6 +109,7 @@ export default function RegisterApp() {
   const transform = useStore(appStore, (s) => s.transform)
   const calibration = useStore(appStore, (s) => s.calibration)
   const sensitivity = useStore(appStore, (s) => s.sensitivity)
+  const allowDensePreview = useStore(appStore, (s) => s.allowDensePreview)
   const detectedPoints = useStore(appStore, (s) => s.detectedPoints)
 
   const phaseContrast = useImageFromDataURL(imageDataURL)
@@ -190,6 +212,8 @@ export default function RegisterApp() {
           onLatticeUpdate={updateLattice}
           onWidthUpdate={updateWidth}
           onHeightUpdate={updateHeight}
+          allowDensePreview={allowDensePreview}
+          onAllowDensePreviewChange={setAllowDensePreview}
           transform={transform}
           onTransformUpdate={updateTransform}
           sensitivity={sensitivity}

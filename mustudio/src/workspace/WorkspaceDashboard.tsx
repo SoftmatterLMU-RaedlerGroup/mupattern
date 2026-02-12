@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
 import { useStore } from "@tanstack/react-store"
 import { Button } from "@/components/ui/button"
@@ -24,15 +24,6 @@ import { loadImageFile } from "@/lib/load-tif"
 import { startWithImage } from "@/register/store"
 
 const TIFF_RE = /^img_channel(\d+)_position(\d+)_time(\d+)_z(\d+)\.tif$/i
-
-function imageToDataURL(img: HTMLImageElement): string {
-  const canvas = document.createElement("canvas")
-  canvas.width = img.width
-  canvas.height = img.height
-  const ctx = canvas.getContext("2d")!
-  ctx.drawImage(img, 0, 0)
-  return canvas.toDataURL("image/png")
-}
 
 async function scanParentFolder(handle: FileSystemDirectoryHandle): Promise<{
   positions: string[]
@@ -78,14 +69,7 @@ export default function WorkspaceDashboard() {
   const activeId = useStore(workspaceStore, (s) => s.activeId)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    for (const w of workspaces) {
-      if (!getDirHandle(w.id)) {
-        restoreDirHandle(w.id).then(() => {})
-      }
-    }
-  }, [workspaces])
+  const [opening, setOpening] = useState(false)
 
   const handleAddWorkspace = useCallback(async () => {
     setError(null)
@@ -140,22 +124,32 @@ export default function WorkspaceDashboard() {
     setActiveWorkspace(ws.id)
   }, [])
 
-  const handlePositionClick = useCallback(async (ws: Workspace, posName: string, index: number) => {
+  const handlePositionSelect = useCallback((ws: Workspace, index: number) => {
+    setError(null)
     setCurrentIndex(ws.id, index)
-    const file = await readPositionImage(posName)
-    if (!file) {
-      setError("Could not read file. Try re-opening the folder.")
-      return
-    }
+  }, [])
+
+  const handleLoadSelected = useCallback(async (ws: Workspace) => {
+    if (opening) return
+    const posName = ws.positions[ws.currentIndex]
+    if (!posName) return
+    setError(null)
+    setOpening(true)
     try {
+      const file = await readPositionImage(posName)
+      if (!file) {
+        setError("Could not read file. Try re-opening the folder.")
+        return
+      }
       const loaded = await loadImageFile(file)
-      const dataURL = imageToDataURL(loaded.img)
-      startWithImage(dataURL, loaded.baseName, loaded.width, loaded.height)
+      startWithImage(loaded.img.src, loaded.baseName, loaded.width, loaded.height)
       navigate("/register")
     } catch {
       setError("Failed to decode image.")
+    } finally {
+      setOpening(false)
     }
-  }, [navigate])
+  }, [navigate, opening])
 
   const activeWorkspace = activeId ? workspaces.find((w) => w.id === activeId) : null
 
@@ -220,7 +214,8 @@ export default function WorkspaceDashboard() {
               {activeWorkspace.positions.map((posName, i) => (
                 <button
                   key={posName}
-                  onClick={() => handlePositionClick(activeWorkspace, posName, i)}
+                  onClick={() => handlePositionSelect(activeWorkspace, i)}
+                  disabled={opening}
                   className={`w-full text-left px-3 py-1.5 rounded text-sm transition-colors ${
                     i === activeWorkspace.currentIndex
                       ? "bg-primary text-primary-foreground"
@@ -231,6 +226,11 @@ export default function WorkspaceDashboard() {
                   {posName}
                 </button>
               ))}
+            </div>
+            <div className="flex justify-end">
+              <Button onClick={() => handleLoadSelected(activeWorkspace)} disabled={opening || activeWorkspace.positions.length === 0}>
+                {opening ? "Loading..." : "Load selected"}
+              </Button>
             </div>
           </>
         ) : (
