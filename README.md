@@ -4,6 +4,11 @@ End-to-end pipeline for analyzing T-cell killing of cancer cells on micropattern
 
 MCF7 cancer cells adhere to micropatterns printed on glass. CAR-T cells are added and kill cancer cells over time, causing them to detach. The pipeline classifies "cell present / absent" per micropattern crop per timepoint, then plots kill curves showing how many cells survive over time.
 
+## App status
+
+- `mupattern` (web) is a lite, deployed app and is currently maintenance-only.
+- `mustudio` (desktop) is the primary surface for ongoing feature development, especially workspace flows.
+
 ### Positions
 
 | Position | Condition | Description |
@@ -50,7 +55,8 @@ ND2 ──► mufile convert ──► raw TIFFs ──► /register ──► b
 
 | Package | Language | Description |
 |---------|----------|-------------|
-| `mupattern/` | React/Vite | Unified web app: workspace management, pattern registration (Register), crop viewer (See) |
+| `mupattern/` | React/Vite | Web app: simple landing page + pattern registration (Register) + crop viewer (See) |
+| `mustudio/` | Electron + React/Vite | Desktop app: workspace dashboard + workspace-integrated Register/See experience |
 | `mufile/` | Python CLI/GUI | Microscopy file utilities: convert ND2 → TIFF, crop TIFFs → zarr, export movies |
 | `mukill/` | Python CLI | Build HuggingFace Dataset, train ResNet-18 classifier, run inference, enforce monotonicity, plot kill curves |
 | `muexpression/` | Python CLI/GUI | Measure fluorescence expression per crop over time, plot intensity curves |
@@ -73,26 +79,11 @@ bun run dev
 # open http://localhost:5173
 ```
 
-The landing page (`/`) is the workspace hub. From here you can:
+The landing page (`/`) links to **Register** and **See**.
 
-- **Open a folder** of TIF files to create a workspace (one file per position)
-- Click a position in the list to jump straight into registration
-- Click **Register** or **See** to open those tools independently
+`mupattern` is intentionally kept minimal and stable; use `mustudio` for workspace-heavy workflows and new capabilities.
 
-### 1a. Workspace mode (recommended for multiple positions)
-
-Use this when you have a folder of phase contrast TIF files, one per position. This is the fastest way to register many positions.
-
-1. Click **Open folder** on the landing page and select the folder containing your TIF files
-2. The app scans for `.tif`/`.tiff` files and displays them as a position list
-3. Click any position to load it into the registration tool (`/register`)
-4. Register the pattern (see steps below), then click **Export**
-5. Use the **prev/next** arrows in the header (or the position counter `3 / 12`) to move to the next position — the pattern, calibration, and transform carry over, only the image changes
-6. Repeat export for each position
-
-The workspace persists across page reloads (position list in localStorage, folder handle in IndexedDB). Re-opening the app restores your position list; the browser may prompt you to re-grant folder access.
-
-### 1b. Single-file mode
+### 1a. Single-file mode (web)
 
 If you only have one image, or want to work without a workspace:
 
@@ -113,7 +104,19 @@ Once an image is loaded in the registration tool:
    - `*_config.yaml` — lattice parameters (for reloading later)
    - `*_mask.png` — binary mask image
 
-The bbox CSV is the input for the cropping step. In workspace mode, use prev/next to move between positions without re-exporting each time.
+The bbox CSV is the input for the cropping step.
+
+### 1b. Workspace mode (desktop via mustudio)
+
+Use `mustudio` when you want the folder-based multi-position workflow:
+
+```bash
+cd mustudio
+bun install
+bun run dev
+```
+
+From `mustudio`, use the workspace dashboard to open a folder, jump into Register, and navigate positions with prev/next.
 
 ### 2a. Convert ND2 to TIFF (mufile convert)
 
@@ -494,6 +497,11 @@ cd mupattern
 bun install
 bun run dev
 
+# Desktop workspace app
+cd ../mustudio
+bun install
+bun run dev
+
 # Run Python CLIs from repo root (uv workspace)
 uv run mufile --help
 uv run mukill --help
@@ -503,7 +511,8 @@ uv run muspot --help
 
 ## Tech stack
 
-- **mupattern** (register + see): React 18, TypeScript, Vite, React Router, TanStack Store, Tailwind CSS 4, shadcn/ui, HTML5 Canvas, File System Access API
+- **mupattern** (web register + see): React 18, TypeScript, Vite, React Router, TanStack Store, Tailwind CSS 4, shadcn/ui, HTML5 Canvas, File System Access API
+- **mustudio** (desktop workspace): Electron, React 18, TypeScript, Vite, React Router, TanStack Store
 - **mufile**: Python, typer, zarr v2, tifffile, numpy, nd2
 - **mukill**: Python, typer, transformers (HuggingFace), torch, zarr v2, datasets, evaluate, pandas, matplotlib
 - **muexpression**: Python, typer, zarr v2, numpy, pandas, matplotlib

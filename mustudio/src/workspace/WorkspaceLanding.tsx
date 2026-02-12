@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button"
 import { HexBackground } from "@/components/HexBackground"
 import { ThemeToggle } from "@/components/ThemeToggle"
 import { useTheme } from "@/components/ThemeProvider"
-import { Microscope, Eye } from "lucide-react"
+import { FolderOpen } from "lucide-react"
 import { Link } from "react-router-dom"
 
 export default function WorkspaceLanding() {
@@ -21,7 +21,7 @@ export default function WorkspaceLanding() {
           className="text-4xl tracking-tight"
           style={{ fontFamily: '"Bitcount", monospace' }}
         >
-          MuPattern
+          MuStudio
         </h1>
         <p className="text-muted-foreground mt-1">
           Microscopy micropattern tools
@@ -30,15 +30,9 @@ export default function WorkspaceLanding() {
 
       <div className="flex gap-4">
         <Button variant="outline" size="lg" asChild>
-          <Link to="/register" className="flex items-center justify-center gap-3 p-6 min-w-[140px]">
-            <Microscope className="size-6 text-muted-foreground" />
-            <span className="font-medium">Register</span>
-          </Link>
-        </Button>
-        <Button variant="outline" size="lg" asChild>
-          <Link to="/see" className="flex items-center justify-center gap-3 p-6 min-w-[140px]">
-            <Eye className="size-6 text-muted-foreground" />
-            <span className="font-medium">See</span>
+          <Link to="/workspace" className="flex items-center justify-center gap-3 p-6 min-w-[200px]">
+            <FolderOpen className="size-6 text-muted-foreground" />
+            <span className="font-medium">Open Workspace</span>
           </Link>
         </Button>
       </div>
