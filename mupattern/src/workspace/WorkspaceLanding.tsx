@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button"
 import { HexBackground } from "@/components/HexBackground"
 import { ThemeToggle } from "@/components/ThemeToggle"
 import { useTheme } from "@/components/ThemeProvider"
-import { FolderOpen, Microscope, Eye } from "lucide-react"
+import { Microscope, Eye } from "lucide-react"
 import { Link } from "react-router-dom"
 
 export default function WorkspaceLanding() {
@@ -29,12 +29,6 @@ export default function WorkspaceLanding() {
       </div>
 
       <div className="flex gap-4">
-        <Button variant="outline" size="lg" asChild>
-          <Link to="/workspace" className="flex items-center justify-center gap-3 p-6 min-w-[140px]">
-            <FolderOpen className="size-6 text-muted-foreground" />
-            <span className="font-medium">Workspace</span>
-          </Link>
-        </Button>
         <Button variant="outline" size="lg" asChild>
           <Link to="/register" className="flex items-center justify-center gap-3 p-6 min-w-[140px]">
             <Microscope className="size-6 text-muted-foreground" />

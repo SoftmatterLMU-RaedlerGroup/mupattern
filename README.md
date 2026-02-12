@@ -4,6 +4,11 @@ End-to-end pipeline for analyzing T-cell killing of cancer cells on micropattern
 
 MCF7 cancer cells adhere to micropatterns printed on glass. CAR-T cells are added and kill cancer cells over time, causing them to detach. The pipeline classifies "cell present / absent" per micropattern crop per timepoint, then plots kill curves showing how many cells survive over time.
 
+## App status
+
+- `mupattern` (web) is a lite, deployed app and is currently maintenance-only.
+- `mustudio` (desktop) is the primary surface for ongoing feature development, especially workspace flows.
+
 ### Positions
 
 | Position | Condition | Description |
@@ -15,52 +20,50 @@ MCF7 cancer cells adhere to micropatterns printed on glass. CAR-T cells are adde
 ## Pipeline overview
 
 ```
-ND2 ──► mufile convert ──► raw TIFFs ──► /register ──► bbox CSV ──► mufile crop ──► crops.zarr
+ND2 ──► muapplication file convert ──► raw TIFFs ──► /register ──► bbox CSV ──► muapplication file crop ──► crops.zarr
                                                         │
                                                         ▼
                                                       /see ──► annotation CSV
                                                         │
                                                         ▼
-                                                mukill dataset ──► HF Dataset
+                                                muapplication kill dataset ──► HF Dataset
                                                         │
                                                         ▼
-                                                  mukill train ──► model weights
+                                                  muapplication kill train ──► model weights
                                                         │
                                                         ▼
-                                                mukill predict ──► predictions CSV
+                                                muapplication kill predict ──► predictions CSV
                                                         │
                                                         ▼
-                                                  mukill clean ──► cleaned CSV
+                                                  muapplication kill clean ──► cleaned CSV
                                                         │
                                                         ▼
-                                                   mukill plot ──► kill curve plots
+                                                   muapplication kill plot ──► kill curve plots
 
-                                              muexpression analyze ──► expression CSV
+                                              muapplication expression analyze ──► expression CSV
                                                         │
                                                         ▼
-                                                muexpression plot ──► expression plots
+                                                muapplication expression plot ──► expression plots
 
-                                                  muspot detect ──► spots CSV
+                                                  muapplication spot detect ──► spots CSV
                                                         │
                                                         ▼
-                                                    muspot plot ──► spot count plots
+                                                    muapplication spot plot ──► spot count plots
 ```
 
 ## Packages
 
 | Package | Language | Description |
 |---------|----------|-------------|
-| `mupattern/` | React/Vite | Unified web app: workspace management, pattern registration (Register), crop viewer (See) |
-| `mufile/` | Python CLI/GUI | Microscopy file utilities: convert ND2 → TIFF, crop TIFFs → zarr, export movies |
-| `mukill/` | Python CLI | Build HuggingFace Dataset, train ResNet-18 classifier, run inference, enforce monotonicity, plot kill curves |
-| `muexpression/` | Python CLI/GUI | Measure fluorescence expression per crop over time, plot intensity curves |
-| `muspot/` | Python CLI | Detect fluorescent spots per crop over time using spotiflow, plot spot count curves |
+| `mupattern/` | React/Vite | Web app: simple landing page + pattern registration (Register) + crop viewer (See) |
+| `mustudio/` | Electron + React/Vite | Desktop app: workspace dashboard + workspace-integrated Register/See experience |
+| `muapplication/` | Python backend (CLI/API/GUI) | Unified backend with file, kill, expression, and spot domains for MuStudio |
 
 ## Prerequisites
 
 - [Bun](https://bun.sh/) for JavaScript/TypeScript packages
 - [uv](https://docs.astral.sh/uv/) for Python packages
-- Raw microscopy data: either an ND2 file (use `mufile convert` first) or 2048x2048 uint16 TIFFs named `img_channel{C}_position{N}_time{T}_z{Z}.tif` in `Pos{N}/` directories
+- Raw microscopy data: either an ND2 file (use `muapplication file convert` first) or 2048x2048 uint16 TIFFs named `img_channel{C}_position{N}_time{T}_z{Z}.tif` in `Pos{N}/` directories
 
 ## Step-by-step guide
 
@@ -73,26 +76,11 @@ bun run dev
 # open http://localhost:5173
 ```
 
-The landing page (`/`) is the workspace hub. From here you can:
+The landing page (`/`) links to **Register** and **See**.
 
-- **Open a folder** of TIF files to create a workspace (one file per position)
-- Click a position in the list to jump straight into registration
-- Click **Register** or **See** to open those tools independently
+`mupattern` is intentionally kept minimal and stable; use `mustudio` for workspace-heavy workflows and new capabilities.
 
-### 1a. Workspace mode (recommended for multiple positions)
-
-Use this when you have a folder of phase contrast TIF files, one per position. This is the fastest way to register many positions.
-
-1. Click **Open folder** on the landing page and select the folder containing your TIF files
-2. The app scans for `.tif`/`.tiff` files and displays them as a position list
-3. Click any position to load it into the registration tool (`/register`)
-4. Register the pattern (see steps below), then click **Export**
-5. Use the **prev/next** arrows in the header (or the position counter `3 / 12`) to move to the next position — the pattern, calibration, and transform carry over, only the image changes
-6. Repeat export for each position
-
-The workspace persists across page reloads (position list in localStorage, folder handle in IndexedDB). Re-opening the app restores your position list; the browser may prompt you to re-grant folder access.
-
-### 1b. Single-file mode
+### 1a. Single-file mode (web)
 
 If you only have one image, or want to work without a workspace:
 
@@ -113,37 +101,49 @@ Once an image is loaded in the registration tool:
    - `*_config.yaml` — lattice parameters (for reloading later)
    - `*_mask.png` — binary mask image
 
-The bbox CSV is the input for the cropping step. In workspace mode, use prev/next to move between positions without re-exporting each time.
+The bbox CSV is the input for the cropping step.
 
-### 2a. Convert ND2 to TIFF (mufile convert)
+### 1b. Workspace mode (desktop via mustudio)
+
+Use `mustudio` when you want the folder-based multi-position workflow:
+
+```bash
+cd mustudio
+bun install
+bun run dev
+```
+
+From `mustudio`, use the workspace dashboard to open a folder, jump into Register, and navigate positions with prev/next.
+
+### 2a. Convert ND2 to TIFF (muapplication file convert)
 
 If your raw data is in Nikon ND2 format, convert it to per-position TIFF folders first:
 
 ```bash
-uv run mufile convert /path/to/data.nd2 --pos all --time all --output /path/to/data
+uv run muapplication file convert /path/to/data.nd2 --pos all --time all --output /path/to/data
 ```
 
 `--pos` and `--time` are required and accept `"all"` or a comma-separated mix of indices and Python-style slices:
 
 ```bash
 # Convert only positions 0-2 and timepoints 0-49
-uv run mufile convert /path/to/data.nd2 --pos "0:3" --time "0:50"
+uv run muapplication file convert /path/to/data.nd2 --pos "0:3" --time "0:50"
 
 # Cherry-pick positions and timepoints
-uv run mufile convert /path/to/data.nd2 --pos "0, 3, 5" --time "0:10, 50, -5:"
+uv run muapplication file convert /path/to/data.nd2 --pos "0, 3, 5" --time "0:10, 50, -5:"
 
 # Negative indices and steps work too
-uv run mufile convert /path/to/data.nd2 --pos "-1" --time "0:100:2"
+uv run muapplication file convert /path/to/data.nd2 --pos "-1" --time "0:100:2"
 ```
 
 Before writing, the command prints the full list of selected positions and timepoints and asks for confirmation. TIFF filenames use contiguous 0-based time indices (so `crop` works unchanged); each `Pos{N}/` folder gets a `time_map.csv` mapping the TIFF time index back to the original ND2 timepoint.
 
-### 2b. Crop into zarr (mufile crop)
+### 2b. Crop into zarr (muapplication file crop)
 
 Cut each pattern site out of every frame and store as a zarr array.
 
 ```bash
-uv run mufile crop \
+uv run muapplication file crop \
   --input /path/to/data \
   --pos 150 \
   --bbox /path/to/bbox.csv \
@@ -189,7 +189,7 @@ Tips:
 - For each crop, annotate several timepoints covering the transition from present to absent
 - You need at least ~400 labeled samples for decent training. In our case, 28 crops × 15 timepoints = 420 labels
 
-### 4. Build training dataset (mukill dataset)
+### 4. Build training dataset (muapplication kill dataset)
 
 Convert the zarr crops + annotation CSV into a HuggingFace Dataset.
 
@@ -206,19 +206,19 @@ sources:
 Run:
 
 ```bash
-uv run mukill dataset \
+uv run muapplication kill dataset \
   --config /path/to/dataset.yaml \
   --output /path/to/dataset
 ```
 
 This reads every annotated `(t, crop)` pair from the zarr store, normalizes uint16 → uint8, and saves as a HuggingFace Dataset with columns: `image`, `label` (0=absent, 1=present), `pos`, `crop`, `t`.
 
-### 5. Train the classifier (mukill train)
+### 5. Train the classifier (muapplication kill train)
 
 Fine-tune a pretrained ResNet-18 on your dataset.
 
 ```bash
-uv run mukill train \
+uv run muapplication kill train \
   --dataset /path/to/dataset \
   --output /path/to/model \
   --epochs 20 \
@@ -236,7 +236,7 @@ Options:
 - `--lr` — learning rate (default: 1e-4)
 - `--split` — validation fraction (default: 0.2)
 
-### 6. Predict on all crops (mukill predict)
+### 6. Predict on all crops (muapplication kill predict)
 
 Run inference on the full zarr store (or a subset).
 
@@ -255,13 +255,13 @@ Run:
 
 ```bash
 # Using the pretrained model from HuggingFace:
-uv run mukill predict \
+uv run muapplication kill predict \
   --config /path/to/predict.yaml \
   --model keejkrej/mupattern-resnet18 \
   --output /path/to/predictions.csv
 
 # Or using a local model directory:
-uv run mukill predict \
+uv run muapplication kill predict \
   --config /path/to/predict.yaml \
   --model /path/to/model/best \
   --output /path/to/predictions.csv
@@ -269,18 +269,18 @@ uv run mukill predict \
 
 Output is a CSV in the same `t,crop,label` format as annotations — can be loaded back into See for visual verification.
 
-### 7. Clean and plot (mukill)
+### 7. Clean and plot (muapplication kill)
 
 The raw predictions may have "flickering" — a cell classified as absent then present again. Since dead cells can't come back, enforce monotonicity:
 
 ```bash
 # Clean: once absent, stays absent
-uv run mukill clean \
+uv run muapplication kill clean \
   --input /path/to/predictions.csv \
   --output /path/to/cleaned.csv
 
 # Plot: kill curve + death time histogram
-uv run mukill plot \
+uv run muapplication kill plot \
   --input /path/to/cleaned.csv \
   --output /path/to/kill_curve.png
 ```
@@ -293,7 +293,7 @@ The `plot` command generates two panels:
 
 Death times at `t=0` are excluded — a crop absent at `t=0` means no cell was ever present on that pattern site, not a death event.
 
-### 8. Detect spots (muspot)
+### 8. Detect spots (muapplication spot)
 
 Detect fluorescent spots per crop per timepoint using spotiflow.
 
@@ -311,18 +311,18 @@ Run:
 
 ```bash
 # Detect spots
-uv run muspot detect \
+uv run muapplication spot detect \
   --config /path/to/spots.yaml \
   --output /path/to/spots.csv
 
 # Use a different spotiflow model
-uv run muspot detect \
+uv run muapplication spot detect \
   --config /path/to/spots.yaml \
   --output /path/to/spots.csv \
   --model general
 
 # Plot spot counts over time
-uv run muspot plot \
+uv run muapplication spot plot \
   --input /path/to/spots.csv \
   --output /path/to/spots.png
 ```
@@ -390,19 +390,19 @@ examples/
   kill_pos150_bbox.csv              # Pos150 bounding boxes (killing 2D — MCF7 + CAR-T in suspension)
   kill_pos156_bbox.csv              # Pos156 bounding boxes (killing 3D — MCF7 + CAR-T in collagen gel)
   kill_pos150_annotation.csv        # manual annotations (420 labels, 28 crops, t=0..21)
-  kill_pos140_config.yaml           # mukill predict config for Pos140
-  kill_pos150_config.yaml           # mukill predict config for Pos150
-  kill_pos156_config.yaml           # mukill predict config for Pos156
+  kill_pos140_config.yaml           # muapplication kill predict config for Pos140
+  kill_pos150_config.yaml           # muapplication kill predict config for Pos150
+  kill_pos156_config.yaml           # muapplication kill predict config for Pos156
   kill_pos140.png                   # kill curve — control
   kill_pos150.png                   # kill curve — killing 2D
   kill_pos156.png                   # kill curve — killing 3D
   spot_pos9_bbox.csv                # Pos9 bounding boxes (spot detection)
-  spot_pos9_config.yaml             # muspot detect config for Pos9 (channel 2)
+  spot_pos9_config.yaml             # muapplication spot detect config for Pos9 (channel 2)
   spot_pos9.png                     # spot count curves — Pos9
   expression_pos0_bbox.csv          # Pos0 bounding boxes (HuH7)
   expression_pos1_bbox.csv          # Pos1 bounding boxes (HuH7)
-  expression_pos0_config.yaml       # muexpression analyze config for Pos0
-  expression_pos1_config.yaml       # muexpression analyze config for Pos1
+  expression_pos0_config.yaml       # muapplication expression analyze config for Pos0
+  expression_pos1_config.yaml       # muapplication expression analyze config for Pos1
   expression_pos0.jpg               # expression curves — Pos0
   expression_pos1.jpg               # expression curves — Pos1
 ```
@@ -417,7 +417,7 @@ uvx --from huggingface_hub hf download keejkrej/mupattern-resnet18 --local-dir .
 
 ## File formats
 
-### Bounding box CSV (Register → mufile crop)
+### Bounding box CSV (Register → muapplication file crop)
 
 ```csv
 crop,x,y,w,h
@@ -425,7 +425,7 @@ crop,x,y,w,h
 1,22,1678,77,77
 ```
 
-### Annotation / prediction CSV (See ↔ mukill)
+### Annotation / prediction CSV (See ↔ muapplication kill)
 
 ```csv
 t,crop,label
@@ -436,7 +436,7 @@ t,crop,label
 
 All tools use the same `t,crop,label` format. Labels are `true` (cell present) or `false` (cell absent).
 
-### Dataset config YAML (mukill dataset)
+### Dataset config YAML (muapplication kill dataset)
 
 ```yaml
 sources:
@@ -445,7 +445,7 @@ sources:
     annotations: /path/to/annotations.csv
 ```
 
-### Spot CSV (muspot detect → muspot plot)
+### Spot CSV (muapplication spot detect → muapplication spot plot)
 
 ```csv
 t,crop,spot,y,x
@@ -456,7 +456,7 @@ t,crop,spot,y,x
 
 One row per detected spot. `spot` is a 0-based index within each `(t, crop)` frame. `y` and `x` are subpixel spot coordinates.
 
-### Predict config YAML (mukill predict)
+### Predict config YAML (muapplication kill predict)
 
 ```yaml
 sources:
@@ -468,20 +468,20 @@ sources:
 
 ## GUI executables
 
-`mufile` and `muexpression` include GUI apps (CustomTkinter) for users who prefer a graphical interface.
+`muapplication` includes file and expression GUI apps (CustomTkinter) for users who prefer a graphical interface.
 
 **Run from source:**
 
 ```bash
-uv run mufile-gui
-uv run muexpression-gui
+uv run muapplication-file-gui
+uv run muapplication-expression-gui
 ```
 
 **Build standalone executables** (Windows, no Python install required):
 
 ```bash
-uv run pyinstaller mufile_gui.spec --noconfirm
-uv run pyinstaller muexpression_gui.spec --noconfirm
+uv run pyinstaller pyinstaller/mufile_gui.spec --noconfirm
+uv run pyinstaller pyinstaller/muexpression_gui.spec --noconfirm
 ```
 
 Outputs: `dist/mufile-gui.exe` and `dist/muexpression-gui.exe`. These bundles do not include PyTorch.
@@ -494,17 +494,22 @@ cd mupattern
 bun install
 bun run dev
 
+# Desktop workspace app
+cd ../mustudio
+bun install
+bun run dev
+
 # Run Python CLIs from repo root (uv workspace)
-uv run mufile --help
-uv run mukill --help
-uv run muexpression --help
-uv run muspot --help
+uv run muapplication --help
+uv run muapplication file --help
+uv run muapplication kill --help
+uv run muapplication expression --help
+uv run muapplication spot --help
 ```
 
 ## Tech stack
 
-- **mupattern** (register + see): React 18, TypeScript, Vite, React Router, TanStack Store, Tailwind CSS 4, shadcn/ui, HTML5 Canvas, File System Access API
-- **mufile**: Python, typer, zarr v2, tifffile, numpy, nd2
-- **mukill**: Python, typer, transformers (HuggingFace), torch, zarr v2, datasets, evaluate, pandas, matplotlib
-- **muexpression**: Python, typer, zarr v2, numpy, pandas, matplotlib
-- **muspot**: Python, typer, spotiflow, zarr v2, numpy, pandas, matplotlib
+- **mupattern** (web register + see): React 18, TypeScript, Vite, React Router, TanStack Store, Tailwind CSS 4, shadcn/ui, HTML5 Canvas, File System Access API
+- **mustudio** (desktop workspace): Electron, React 18, TypeScript, Vite, React Router, TanStack Store
+- **muapplication**: Python, typer, FastAPI, zarr v2, tifffile, nd2, transformers (HuggingFace), torch, spotiflow, pandas, matplotlib
+
