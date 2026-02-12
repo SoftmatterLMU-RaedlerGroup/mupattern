@@ -1,6 +1,6 @@
-"""Entry point for mufile GUI executable."""
+"""Entry point for muapplication file GUI executable."""
 
-from mufile.gui import main
+from muapplication.gui.file import main
 
 if __name__ == "__main__":
     main()

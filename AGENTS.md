@@ -6,8 +6,8 @@
 
 ## Project structure
 
-- **Root** `pyproject.toml` defines a uv workspace; Python packages: `mufile`, `muexpression`, `muspot`, `mukill`
-- Run Python CLIs from repo root: `uv run mufile --help`, `uv run mukill --help`, etc.
+- **Root** `pyproject.toml` defines a uv workspace; Python package: `muapplication`
+- Run Python CLIs from repo root: `uv run muapplication --help` and domain subcommands like `uv run muapplication file --help`.
 - JS app (web): `mupattern` — lite web app (landing, register, see), deployed on Firebase; run with `bun run dev` from that directory
 - JS app (desktop): `mustudio` — Electron workspace-first app; run with `bun run dev` from that directory
 
@@ -15,3 +15,4 @@
 
 - `mupattern` is frozen/maintenance-only. Avoid feature work unless explicitly requested; only apply critical fixes/docs tweaks.
 - New feature development should go to `mustudio`.
+
