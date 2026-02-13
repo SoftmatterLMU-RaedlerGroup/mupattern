@@ -1,5 +1,4 @@
 import { Store } from "@tanstack/store"
-import { saveHandle, loadHandle, clearHandle } from "@/lib/idb-handle"
 
 /** Single workspace backed by a parent folder with Pos{N}/ subdirectories. */
 export interface PositionTag {
@@ -12,6 +11,7 @@ export interface PositionTag {
 export interface Workspace {
   id: string
   name: string
+  rootPath: string
   positions: number[]
   posTags: PositionTag[]
   positionFilterLabels: string[]
@@ -30,7 +30,6 @@ export interface WorkspaceStoreState {
 }
 
 const DEFAULT_STATE: WorkspaceStoreState = { workspaces: [], activeId: null }
-const IDB_PREFIX = "mustudio-ws-"
 let hasHydratedWorkspaceState = false
 
 function getWorkspaceStateApi() {
@@ -67,6 +66,7 @@ function normalizePositionValue(value: unknown): number | null {
 }
 
 function normalizeWorkspace(workspace: Workspace): Workspace {
+  const rootPath = typeof workspace.rootPath === "string" ? workspace.rootPath : ""
   const positionsFromState = Array.isArray(workspace.positions)
     ? workspace.positions.map((value) => normalizePositionValue(value)).filter((value): value is number => value != null)
     : []
@@ -106,6 +106,7 @@ function normalizeWorkspace(workspace: Workspace): Workspace {
 
   return {
     ...workspace,
+    rootPath,
     positions,
     posTags,
     positionFilterLabels,
@@ -154,36 +155,6 @@ workspaceStore.subscribe(() => {
   }, 1200)
 })
 
-// --- In-memory directory handle cache ---
-
-const _handleCache = new Map<string, FileSystemDirectoryHandle>()
-
-function idbKey(workspaceId: string): string {
-  return `${IDB_PREFIX}${workspaceId}`
-}
-
-export function getDirHandle(workspaceId: string): FileSystemDirectoryHandle | null {
-  return _handleCache.get(workspaceId) ?? null
-}
-
-export async function persistDirHandle(workspaceId: string, handle: FileSystemDirectoryHandle): Promise<void> {
-  _handleCache.set(workspaceId, handle)
-  await saveHandle(idbKey(workspaceId), handle)
-}
-
-export async function restoreDirHandle(workspaceId: string): Promise<FileSystemDirectoryHandle | null> {
-  const handle = await loadHandle(idbKey(workspaceId))
-  if (handle) {
-    _handleCache.set(workspaceId, handle)
-  }
-  return handle
-}
-
-async function removeDirHandle(workspaceId: string): Promise<void> {
-  _handleCache.delete(workspaceId)
-  await clearHandle(idbKey(workspaceId))
-}
-
 // --- Filename builder (mufile convert format) ---
 
 /** Format: img_channel{C:03d}_position{P:03d}_time{T:09d}_z{Z:03d}.tif */
@@ -197,14 +168,13 @@ export function posDirName(pos: number): string {
 
 // --- Actions ---
 
-export function addWorkspace(workspace: Workspace, dirHandle: FileSystemDirectoryHandle) {
+export function addWorkspace(workspace: Workspace) {
   const normalizedWorkspace = normalizeWorkspace(workspace)
   workspaceStore.setState((s) => ({
     ...s,
     workspaces: [...s.workspaces, normalizedWorkspace],
     activeId: normalizedWorkspace.id,
   }))
-  persistDirHandle(normalizedWorkspace.id, dirHandle)
 }
 
 export function removeWorkspace(workspaceId: string) {
@@ -212,7 +182,6 @@ export function removeWorkspace(workspaceId: string) {
     workspaces: s.workspaces.filter((w) => w.id !== workspaceId),
     activeId: s.activeId === workspaceId ? null : s.activeId,
   }))
-  removeDirHandle(workspaceId)
 }
 
 export function setActiveWorkspace(workspaceId: string | null) {
@@ -399,33 +368,84 @@ export function hasWorkspace(): boolean {
   return getActiveWorkspace() !== null
 }
 
-/** Read a TIF file for the given position number, using the active workspace's dimension selections. */
-export async function readPositionImage(posNum: number): Promise<File | null> {
+export interface LoadedWorkspaceImage {
+  src: string
+  baseName: string
+  width: number
+  height: number
+}
+
+async function rgbaToObjectUrl(
+  rgba: ArrayBuffer,
+  width: number,
+  height: number
+): Promise<string> {
+  const canvas = document.createElement("canvas")
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext("2d")
+  if (!ctx) throw new Error("Canvas context unavailable")
+  const pixels = new Uint8ClampedArray(rgba)
+  const imageData = new ImageData(pixels, width, height)
+  ctx.putImageData(imageData, 0, 0)
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((result) => {
+      if (result) resolve(result)
+      else reject(new Error("Failed to encode image"))
+    }, "image/png")
+  })
+  return URL.createObjectURL(blob)
+}
+
+/** Read and decode a TIF for the given position using Electron main process I/O. */
+export async function readPositionImage(posNum: number): Promise<LoadedWorkspaceImage | null> {
   const ws = getActiveWorkspace()
   if (!ws) return null
-
-  const dirHandle = getDirHandle(ws.id)
-  if (!dirHandle) return null
+  if (!ws.rootPath) return null
 
   try {
-    const posHandle = await dirHandle.getDirectoryHandle(posDirName(posNum))
-    const filename = buildTifFilename(
-      posNum,
-      ws.selectedChannel,
-      ws.selectedTime,
-      ws.selectedZ
-    )
-    const fileHandle = await posHandle.getFileHandle(filename)
-    return await fileHandle.getFile()
+    const result = await window.mustudio.workspace.readPositionImage({
+      workspacePath: ws.rootPath,
+      pos: posNum,
+      channel: ws.selectedChannel,
+      time: ws.selectedTime,
+      z: ws.selectedZ,
+    })
+    if (!result.ok) return null
+    const src = await rgbaToObjectUrl(result.rgba, result.width, result.height)
+    return {
+      src,
+      baseName: result.baseName,
+      width: result.width,
+      height: result.height,
+    }
   } catch {
     return null
   }
 }
 
 /** Read the TIF for the active workspace's current position (positions[currentIndex]). */
-export async function readCurrentPositionImage(): Promise<File | null> {
+export async function readCurrentPositionImage(): Promise<LoadedWorkspaceImage | null> {
   const ws = getActiveWorkspace()
   if (!ws || ws.positions.length === 0) return null
   const pos = ws.positions[ws.currentIndex]
   return readPositionImage(pos)
+}
+
+export async function saveWorkspaceBboxCsv(
+  workspaceId: string,
+  pos: number,
+  csv: string
+): Promise<boolean> {
+  const ws = workspaceStore.state.workspaces.find((workspace) => workspace.id === workspaceId)
+  if (!ws || !ws.rootPath) return false
+  try {
+    return await window.mustudio.workspace.saveBboxCsv({
+      workspacePath: ws.rootPath,
+      pos,
+      csv,
+    })
+  } catch {
+    return false
+  }
 }

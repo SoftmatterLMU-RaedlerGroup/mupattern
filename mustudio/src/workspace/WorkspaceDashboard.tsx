@@ -17,55 +17,11 @@ import {
   togglePositionTagFilter,
   clearPositionTagFilters,
   getWorkspaceVisiblePositionIndices,
-  getDirHandle,
-  posDirName,
-  restoreDirHandle,
   readPositionImage,
   type Workspace,
 } from "@/workspace/store"
-import { loadImageFile } from "@/lib/load-tif"
 import { parseSliceStringOverValues } from "@/lib/slices"
 import { startWithImage } from "@/register/store"
-
-const TIFF_RE = /^img_channel(\d+)_position(\d+)_time(\d+)_z(\d+)\.tif$/i
-
-async function scanParentFolder(handle: FileSystemDirectoryHandle): Promise<{
-  positions: number[]
-  channels: number[]
-  times: number[]
-  zSlices: number[]
-} | null> {
-  const positions: number[] = []
-  for await (const entry of handle.values()) {
-    const m = entry.kind === "directory" ? entry.name.match(/^Pos(\d+)$/i) : null
-    if (m) {
-      positions.push(Number.parseInt(m[1], 10))
-    }
-  }
-  positions.sort((a, b) => a - b)
-  if (positions.length === 0) return null
-
-  const channels = new Set<number>()
-  const times = new Set<number>()
-  const zSlices = new Set<number>()
-
-  const firstPos = await handle.getDirectoryHandle(posDirName(positions[0]))
-  for await (const entry of firstPos.values()) {
-    if (entry.kind !== "file") continue
-    const m = entry.name.match(TIFF_RE)
-    if (!m) continue
-    channels.add(parseInt(m[1], 10))
-    times.add(parseInt(m[3], 10))
-    zSlices.add(parseInt(m[4], 10))
-  }
-
-  return {
-    positions,
-    channels: [...channels].sort((a, b) => a - b),
-    times: [...times].sort((a, b) => a - b),
-    zSlices: [...zSlices].sort((a, b) => a - b),
-  }
-}
 
 export default function WorkspaceDashboard() {
   const { theme } = useTheme()
@@ -82,17 +38,17 @@ export default function WorkspaceDashboard() {
     setError(null)
     setLoading(true)
     try {
-      const handle = await window.showDirectoryPicker()
-      const result = await scanParentFolder(handle)
+      const result = await window.mustudio.workspace.pickDirectory()
       if (!result || result.positions.length === 0) {
         setError("No Pos{N} subdirectories found. Open the output folder of mufile convert.")
         setLoading(false)
         return
       }
-      const { positions, channels, times, zSlices } = result
+      const { path, name, positions, channels, times, zSlices } = result
       const workspace: Workspace = {
         id: crypto.randomUUID(),
-        name: handle.name,
+        name,
+        rootPath: path,
         positions,
         posTags: [],
         positionFilterLabels: [],
@@ -104,7 +60,7 @@ export default function WorkspaceDashboard() {
         selectedZ: zSlices[0] ?? 0,
         currentIndex: 0,
       }
-      addWorkspace(workspace, handle)
+      addWorkspace(workspace)
     } catch (e) {
       if ((e as DOMException).name !== "AbortError") {
         setError("Failed to open folder.")
@@ -116,18 +72,8 @@ export default function WorkspaceDashboard() {
 
   const handleOpen = useCallback(async (ws: Workspace) => {
     setError(null)
-    let handle = getDirHandle(ws.id)
-    if (!handle) {
-      handle = await restoreDirHandle(ws.id)
-    }
-    if (!handle) {
-      setError("Could not restore folder. Remove and re-add this workspace.")
-      return
-    }
-    try {
-      await handle.requestPermission?.({ mode: "read" })
-    } catch {
-      setError("Permission denied. Try re-adding the workspace.")
+    if (!ws.rootPath) {
+      setError("Workspace path is unavailable. Remove and re-add this workspace.")
       return
     }
     setActiveWorkspace(ws.id)
@@ -179,13 +125,12 @@ export default function WorkspaceDashboard() {
     setError(null)
     setOpening(true)
     try {
-      const file = await readPositionImage(pos)
-      if (!file) {
+      const loaded = await readPositionImage(pos)
+      if (!loaded) {
         setError("Could not read file. Try re-opening the folder.")
         return
       }
-      const loaded = await loadImageFile(file)
-      startWithImage(loaded.img.src, loaded.baseName, loaded.width, loaded.height)
+      startWithImage(loaded.src, loaded.baseName, loaded.width, loaded.height)
       navigate("/register")
     } catch {
       setError("Failed to decode image.")

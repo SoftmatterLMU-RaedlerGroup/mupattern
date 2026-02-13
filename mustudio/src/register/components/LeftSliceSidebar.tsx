@@ -4,12 +4,11 @@ import { useNavigate } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { ChevronLeft, ChevronRight, Home, Save } from "lucide-react"
 import {
-  getDirHandle,
   getWorkspaceVisiblePositionIndices,
   workspaceStore,
   nextPosition,
-  posDirName,
   prevPosition,
+  saveWorkspaceBboxCsv,
   setCurrentIndex,
   setSelectedChannel,
   setSelectedTime,
@@ -134,26 +133,15 @@ export function LeftSliceSidebar({
 
   const handleSave = useCallback(async () => {
     if (!activeWorkspace || currentPosition == null || saving) return
-    const dirHandle = getDirHandle(activeWorkspace.id)
-    if (!dirHandle) {
-      onWorkspaceImageError("Workspace folder is unavailable. Re-open the workspace and try again.")
-      return
-    }
     const saveStartedAt = Date.now()
     setSaving(true)
     try {
-      const perm = await dirHandle.requestPermission?.({ mode: "readwrite" })
-      if (perm === "denied") {
-        onWorkspaceImageError("Write permission denied for workspace folder.")
+      const csv = buildBBoxCsv(canvasSize, patternPx, transform)
+      const ok = await saveWorkspaceBboxCsv(activeWorkspace.id, currentPosition, csv)
+      if (!ok) {
+        onWorkspaceImageError("Failed to save bbox CSV to workspace.")
         return
       }
-
-      const filename = `${posDirName(currentPosition)}_bbox.csv`
-      const csv = buildBBoxCsv(canvasSize, patternPx, transform)
-      const fileHandle = await dirHandle.getFileHandle(filename, { create: true })
-      const writable = await fileHandle.createWritable()
-      await writable.write(csv)
-      await writable.close()
       onWorkspaceImageError(null)
     } catch {
       onWorkspaceImageError("Failed to save bbox CSV to workspace.")

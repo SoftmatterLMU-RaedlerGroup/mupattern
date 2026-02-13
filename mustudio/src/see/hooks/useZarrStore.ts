@@ -1,11 +1,8 @@
 import { useState, useEffect } from "react";
 import { useStore } from "@tanstack/react-store";
-import { DirectoryStore } from "@/see/lib/directory-store";
-import { discoverStore, type StoreIndex } from "@/see/lib/zarr";
+import { createZarrStore, discoverStore, type StoreIndex, type ZarrStore } from "@/see/lib/zarr";
 import {
   workspaceStore,
-  getDirHandle,
-  restoreDirHandle,
 } from "@/workspace/store";
 import { setSelectedPositions, setSelectedPos, setC, setZ } from "@/see/store";
 
@@ -35,9 +32,9 @@ export function useZarrStore() {
     const w = workspaces.find((item) => item.id === activeId);
     if (!w) return "none";
     const pos = w.positions[w.currentIndex];
-    return `${w.id}:${w.currentIndex}:${pos ?? "none"}`;
+    return `${w.id}:${w.rootPath}:${w.currentIndex}:${pos ?? "none"}`;
   });
-  const [store, setStore] = useState<DirectoryStore | null>(null);
+  const [store, setStore] = useState<ZarrStore | null>(null);
   const [index, setIndex] = useState<StoreIndex | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,16 +56,10 @@ export function useZarrStore() {
       setError(null);
 
       try {
-        let workspaceHandle = getDirHandle(activeWorkspace.id);
-        if (!workspaceHandle) {
-          workspaceHandle = await restoreDirHandle(activeWorkspace.id);
+        if (!activeWorkspace.rootPath) {
+          throw new Error("Workspace path is unavailable. Re-open the workspace.");
         }
-        if (!workspaceHandle) {
-          throw new Error("Workspace folder is unavailable. Re-open the workspace.");
-        }
-
-        const cropsHandle = await workspaceHandle.getDirectoryHandle("crops.zarr");
-        const ds = new DirectoryStore(cropsHandle);
+        const ds = createZarrStore(activeWorkspace.rootPath);
 
         const workspacePos = activeWorkspace.positions[activeWorkspace.currentIndex];
         if (typeof workspacePos !== "number") {
@@ -78,8 +69,7 @@ export function useZarrStore() {
         const resolvedPosId = String(workspacePos);
         const idx: StoreIndex = await withTimeout(
           discoverStore(
-            cropsHandle,
-            ds,
+            activeWorkspace.rootPath,
             [resolvedPosId],
             { metadataMode: "fast" }
           ),

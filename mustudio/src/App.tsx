@@ -1,34 +1,10 @@
-import { useEffect } from "react"
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
 import { useStore } from "@tanstack/react-store"
 import WorkspaceDashboard from "@/workspace/WorkspaceDashboard"
 import RegisterApp from "@/register/RegisterApp"
 import SeeApp from "@/see/SeeApp"
 import { appStore } from "@/register/store"
-import {
-  workspaceStore,
-  restoreDirHandle,
-  getDirHandle,
-} from "@/workspace/store"
-
-function InitHandles() {
-  useEffect(() => {
-    const restored = new Set<string>()
-    const restoreMissingHandles = () => {
-      for (const w of workspaceStore.state.workspaces) {
-        if (restored.has(w.id)) continue
-        restored.add(w.id)
-        if (!getDirHandle(w.id)) {
-          restoreDirHandle(w.id).then(() => {})
-        }
-      }
-    }
-
-    restoreMissingHandles()
-    return workspaceStore.subscribe(restoreMissingHandles)
-  }, [])
-  return null
-}
+import { workspaceStore } from "@/workspace/store"
 
 function WorkspaceOnlyRoute({
   children,
@@ -51,7 +27,6 @@ function WorkspaceOnlyRoute({
 function App() {
   return (
     <BrowserRouter>
-      <InitHandles />
       <Routes>
         <Route path="/" element={<WorkspaceDashboard />} />
         <Route path="/workspace" element={<WorkspaceDashboard />} />

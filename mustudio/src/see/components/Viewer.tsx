@@ -1,7 +1,6 @@
 import { useState, useCallback, useEffect, useLayoutEffect, useRef, useMemo } from "react";
 import { useStore } from "@tanstack/react-store";
-import type { DirectoryStore } from "@/see/lib/directory-store";
-import type { StoreIndex, CropInfo } from "@/see/lib/zarr";
+import type { StoreIndex, CropInfo, ZarrStore } from "@/see/lib/zarr";
 import { loadFrame } from "@/see/lib/zarr";
 import { loadBatchWithRetryOnTotalFailure } from "@/see/lib/frame-loader";
 import { renderUint16ToCanvas, drawSpots } from "@/see/lib/render";
@@ -54,7 +53,7 @@ import { useTheme } from "@/components/ThemeProvider";
 const PAGE_SIZE = 25; // 5x5
 
 interface ViewerProps {
-  store: DirectoryStore;
+  store: ZarrStore;
   index: StoreIndex;
 }
 

@@ -1,92 +1,88 @@
-import { describe, expect, it, mock } from "bun:test";
+import { beforeEach, describe, expect, it, mock } from "bun:test";
+import { createZarrStore, discoverStore, loadFrame } from "../src/see/lib/zarr";
 
-const openMock = mock(async () => ({
-  shape: [5, 2, 3, 32, 32],
-  attrs: {},
+const discoverMock = mock(async () => ({
+  positions: [],
+  crops: {},
 }));
 
-mock.module("zarrita", () => ({
-  root: () => ({
-    resolve: (path: string) => path,
-  }),
-  open: openMock,
+const loadFrameMock = mock(async () => ({
+  ok: true as const,
+  width: 1,
+  height: 1,
+  data: new Uint16Array([0]).buffer,
 }));
 
-import { discoverStore } from "../src/see/lib/zarr";
+beforeEach(() => {
+  discoverMock.mockClear();
+  loadFrameMock.mockClear();
 
-class FakeDirHandle {
-  readonly kind = "directory" as const;
-  readonly name: string;
-  private readonly children = new Map<string, FakeDirHandle>();
-
-  constructor(name: string) {
-    this.name = name;
-  }
-
-  addChild(child: FakeDirHandle): FakeDirHandle {
-    this.children.set(child.name, child);
-    return this;
-  }
-
-  async getDirectoryHandle(name: string): Promise<FakeDirHandle> {
-    const next = this.children.get(name);
-    if (!next) {
-      throw new Error(`Missing directory: ${name}`);
-    }
-    return next;
-  }
-
-  async *values(): AsyncIterableIterator<FakeDirHandle> {
-    for (const child of this.children.values()) {
-      yield child;
-    }
-  }
-}
-
-function makeRootWithCrops(posId: string, cropIds: string[]): FakeDirHandle {
-  const root = new FakeDirHandle("root");
-  const pos = new FakeDirHandle("pos");
-  const posEntry = new FakeDirHandle(posId);
-  const crop = new FakeDirHandle("crop");
-  for (const cropId of cropIds) {
-    crop.addChild(new FakeDirHandle(cropId));
-  }
-  posEntry.addChild(crop);
-  pos.addChild(posEntry);
-  root.addChild(pos);
-  return root;
-}
+  (globalThis as { window?: unknown }).window = {
+    mustudio: {
+      zarr: {
+        discover: discoverMock,
+        loadFrame: loadFrameMock,
+      },
+    },
+  };
+});
 
 describe("discoverStore", () => {
-  it("uses fast metadata mode to avoid opening every crop array", async () => {
-    openMock.mockClear();
-    const root = makeRootWithCrops("140", ["a", "b", "c", "d"]);
+  it("passes metadata mode and maps ipc response", async () => {
+    discoverMock.mockResolvedValueOnce({
+      positions: ["140"],
+      crops: {
+        "140": [
+          { posId: "140", cropId: "a", shape: [5, 2, 3, 32, 32] },
+          { posId: "140", cropId: "b", shape: [5, 2, 3, 32, 32] },
+        ],
+      },
+    });
 
-    const index = await discoverStore(
-      root as unknown as FileSystemDirectoryHandle,
-      {} as never,
-      ["140"],
-      { metadataMode: "fast" }
-    );
+    const index = await discoverStore("C:/ws", ["140"], { metadataMode: "fast" });
 
+    expect(discoverMock).toHaveBeenCalledTimes(1);
+    expect(discoverMock).toHaveBeenCalledWith({
+      workspacePath: "C:/ws",
+      positionFilter: ["140"],
+      metadataMode: "fast",
+    });
     expect(index.positions).toEqual(["140"]);
-    expect(index.crops.get("140")?.map((x) => x.cropId)).toEqual(["a", "b", "c", "d"]);
-    expect(openMock).toHaveBeenCalledTimes(0);
+    expect(index.crops.get("140")?.map((entry) => entry.cropId)).toEqual(["a", "b"]);
+  });
+});
+
+describe("loadFrame", () => {
+  it("loads frame bytes from ipc and returns uint16 data", async () => {
+    const frameBytes = new Uint16Array([1, 2, 3, 4]);
+    loadFrameMock.mockResolvedValueOnce({
+      ok: true,
+      width: 2,
+      height: 2,
+      data: frameBytes.buffer.slice(frameBytes.byteOffset, frameBytes.byteOffset + frameBytes.byteLength),
+    });
+
+    const frame = await loadFrame(createZarrStore("C:/ws"), "140", "000", 3, 1, 2);
+
+    expect(loadFrameMock).toHaveBeenCalledWith({
+      workspacePath: "C:/ws",
+      posId: "140",
+      cropId: "000",
+      t: 3,
+      c: 1,
+      z: 2,
+    });
+    expect(frame.width).toBe(2);
+    expect(frame.height).toBe(2);
+    expect(Array.from(frame.data)).toEqual([1, 2, 3, 4]);
   });
 
-  it("keeps full metadata mode behavior by opening each crop array", async () => {
-    openMock.mockClear();
-    const root = makeRootWithCrops("140", ["a", "b", "c"]);
+  it("throws when ipc returns an error", async () => {
+    loadFrameMock.mockResolvedValueOnce({
+      ok: false,
+      error: "boom",
+    });
 
-    const index = await discoverStore(
-      root as unknown as FileSystemDirectoryHandle,
-      {} as never,
-      ["140"],
-      { metadataMode: "full" }
-    );
-
-    expect(index.positions).toEqual(["140"]);
-    expect(index.crops.get("140")?.length).toBe(3);
-    expect(openMock).toHaveBeenCalledTimes(3);
+    await expect(loadFrame(createZarrStore("C:/ws"), "140", "000", 0)).rejects.toThrow("boom");
   });
 });

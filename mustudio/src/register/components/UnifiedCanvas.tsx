@@ -13,14 +13,11 @@ interface UnifiedCanvasProps {
   onZoom: (factor: number) => void
   onRotate: (deltaRad: number) => void
   patternOpacity: number
-  onExportYAML?: () => void
   detectedPoints?: Array<{ x: number; y: number }> | null
 }
 
 export interface UnifiedCanvasRef {
-  exportPNG: () => void
   exportCSV: () => void
-  exportAll: () => void
 }
 
 const MAX_PREVIEW_RECTS = 12000
@@ -43,7 +40,7 @@ interface LatticeDrawStats {
 }
 
 export const UnifiedCanvas = forwardRef<UnifiedCanvasRef, UnifiedCanvasProps>(
-  function UnifiedCanvas({ displayImage, canvasSize, imageBaseName, patternPx, transform, onTransformUpdate, onZoom, onRotate, patternOpacity, onExportYAML, detectedPoints }, ref) {
+  function UnifiedCanvas({ displayImage, canvasSize, imageBaseName, patternPx, transform, onTransformUpdate, onZoom, onRotate, patternOpacity, detectedPoints }, ref) {
     const { theme } = useTheme()
     const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -368,69 +365,6 @@ export const UnifiedCanvas = forwardRef<UnifiedCanvasRef, UnifiedCanvasProps>(
       }
     }, [])
 
-    const exportPNG = useCallback(() => {
-      const w = canvasSize.width
-      const h = canvasSize.height
-
-      const exportCanvas = document.createElement("canvas")
-      exportCanvas.width = w
-      exportCanvas.height = h
-      const ctx = exportCanvas.getContext("2d")
-      if (!ctx) return
-
-      ctx.fillStyle = "#000000"
-      ctx.fillRect(0, 0, w, h)
-      drawLattice(ctx, w, h, patternPx, transform, {
-        mode: "export",
-        simplified: false,
-        maxRects: null,
-        maxOverlapRects: null,
-      })
-
-      const imageData = ctx.getImageData(0, 0, w, h)
-      const data = imageData.data
-      const visited = new Uint8Array(w * h)
-
-      const queue: number[] = []
-      const enqueue = (idx: number) => {
-        if (!visited[idx] && data[idx * 4] > 0) {
-          visited[idx] = 1
-          queue.push(idx)
-        }
-      }
-
-      for (let x = 0; x < w; x++) {
-        enqueue(x)
-        enqueue((h - 1) * w + x)
-      }
-      for (let y = 0; y < h; y++) {
-        enqueue(y * w)
-        enqueue(y * w + w - 1)
-      }
-
-      while (queue.length > 0) {
-        const idx = queue.pop()!
-        const px = idx * 4
-        data[px] = 0
-        data[px + 1] = 0
-        data[px + 2] = 0
-
-        const x = idx % w
-        const y = (idx - x) / w
-        if (x > 0) enqueue(idx - 1)
-        if (x < w - 1) enqueue(idx + 1)
-        if (y > 0) enqueue(idx - w)
-        if (y < h - 1) enqueue(idx + w)
-      }
-
-      ctx.putImageData(imageData, 0, 0)
-
-      const link = document.createElement("a")
-      link.download = `${imageBaseName}_mask.png`
-      link.href = exportCanvas.toDataURL("image/png")
-      link.click()
-    }, [canvasSize, imageBaseName, patternPx, transform, drawLattice])
-
     const exportCSV = useCallback(() => {
       const w = canvasSize.width
       const h = canvasSize.height
@@ -482,13 +416,7 @@ export const UnifiedCanvas = forwardRef<UnifiedCanvasRef, UnifiedCanvasProps>(
       URL.revokeObjectURL(link.href)
     }, [canvasSize, imageBaseName, patternPx, transform])
 
-    const exportAll = useCallback(() => {
-      exportPNG()
-      exportCSV()
-      onExportYAML?.()
-    }, [exportPNG, exportCSV, onExportYAML])
-
-    useImperativeHandle(ref, () => ({ exportPNG, exportCSV, exportAll }), [exportPNG, exportCSV, exportAll])
+    useImperativeHandle(ref, () => ({ exportCSV }), [exportCSV])
 
     const handlePointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
       if (activePointerId.current !== null) return
