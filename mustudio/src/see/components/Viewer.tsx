@@ -52,7 +52,7 @@ import {
 } from "lucide-react";
 import { useTheme } from "@/components/ThemeProvider";
 
-const PAGE_SIZE = 25; // 5x5
+const PAGE_SIZE = 9; // 3x3
 
 interface ViewerProps {
   store: ZarrStore;
@@ -481,7 +481,7 @@ export function Viewer({ store, index }: ViewerProps) {
         <LeftSliceSidebar />
         {/* Crop grid */}
         <div className="flex-1 overflow-hidden p-4">
-          <div className="grid grid-cols-5 grid-rows-5 gap-2 h-full">
+          <div className="grid grid-cols-3 grid-rows-3 gap-2 h-full">
             {pageCrops.map((crop) => (
               <div
                 key={canvasKey(crop.posId, crop.cropId)}
