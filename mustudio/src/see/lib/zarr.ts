@@ -92,3 +92,39 @@ export async function loadFrame(
     width: response.width,
   }
 }
+
+/**
+ * Check whether the workspace has masks.zarr (tissue segmentation).
+ */
+export async function hasMasks(workspacePath: string): Promise<boolean> {
+  const response = await window.mustudio.zarr.hasMasks({ workspacePath })
+  return response.hasMasks
+}
+
+/**
+ * Load a single mask frame (t) for a crop → { data, height, width }.
+ * Layout: masks.zarr/pos/{posId}/crop/{cropId} with (T, H, W) uint32.
+ */
+export async function loadMaskFrame(
+  store: ZarrStore,
+  posId: string,
+  cropId: string,
+  t: number
+): Promise<{ data: Uint32Array; height: number; width: number }> {
+  const response = await window.mustudio.zarr.loadMaskFrame({
+    workspacePath: store.workspacePath,
+    posId,
+    cropId,
+    t,
+  })
+
+  if (!response.ok) {
+    throw new Error(response.error)
+  }
+
+  return {
+    data: new Uint32Array(response.data),
+    height: response.height,
+    width: response.width,
+  }
+}

@@ -15,6 +15,7 @@ export interface ViewerState {
   annotating: boolean
   showAnnotations: boolean
   showSpots: boolean
+  showMasks: boolean
   /** Which positions were selected in the picker (for auto-reload) */
   selectedPositions: string[]
 }
@@ -32,6 +33,7 @@ const defaultState: ViewerState = {
   annotating: false,
   showAnnotations: true,
   showSpots: true,
+  showMasks: true,
   selectedPositions: [],
 }
 
@@ -101,6 +103,10 @@ export function setShowAnnotations(showAnnotations: boolean) {
 
 export function setShowSpots(showSpots: boolean) {
   viewerStore.setState((s) => ({ ...s, showSpots }))
+}
+
+export function setShowMasks(showMasks: boolean) {
+  viewerStore.setState((s) => ({ ...s, showMasks }))
 }
 
 // --- Helpers ---

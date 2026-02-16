@@ -112,17 +112,17 @@ def plot(
     ],
     output: Annotated[
         Path,
-        typer.Option("--output", help="Output plot image path (e.g. tissue.png)."),
+        typer.Option("--output", help="Output directory for the two plots (gfp_count.png, median_fluorescence.png)."),
     ],
     gfp_threshold: Annotated[
         float,
         typer.Option("--gfp-threshold", help="GFP+ when (total_fluorescence/cell_area) - background > this."),
     ],
 ) -> None:
-    """Plot GFP+ count and mean/median mean intensity above background over time."""
+    """Plot GFP+ count and median fluorescence per crop over time (two square plots)."""
     typer.echo(f"Loaded {input}, GFP threshold={gfp_threshold}")
     run_plot(input, output, gfp_threshold)
-    typer.echo(f"Saved plot to {output}")
+    typer.echo(f"Saved plots to {output / 'gfp_count.png'} and {output / 'median_fluorescence.png'}")
 
 
 def main() -> None:

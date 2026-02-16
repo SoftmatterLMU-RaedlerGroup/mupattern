@@ -99,6 +99,35 @@ interface ZarrLoadFrameFailure {
 
 type ZarrLoadFrameResponse = ZarrLoadFrameSuccess | ZarrLoadFrameFailure
 
+interface ZarrHasMasksRequest {
+  workspacePath: string
+}
+
+interface ZarrHasMasksResponse {
+  hasMasks: boolean
+}
+
+interface ZarrLoadMaskFrameRequest {
+  workspacePath: string
+  posId: string
+  cropId: string
+  t: number
+}
+
+interface ZarrLoadMaskFrameSuccess {
+  ok: true
+  width: number
+  height: number
+  data: ArrayBuffer
+}
+
+interface ZarrLoadMaskFrameFailure {
+  ok: false
+  error: string
+}
+
+type ZarrLoadMaskFrameResponse = ZarrLoadMaskFrameSuccess | ZarrLoadMaskFrameFailure
+
 declare global {
   interface Window {
     mustudio: {
@@ -117,6 +146,8 @@ declare global {
       zarr: {
         discover: (request: ZarrDiscoverRequest) => Promise<ZarrDiscoverResponse>
         loadFrame: (request: ZarrLoadFrameRequest) => Promise<ZarrLoadFrameResponse>
+        hasMasks: (request: ZarrHasMasksRequest) => Promise<ZarrHasMasksResponse>
+        loadMaskFrame: (request: ZarrLoadMaskFrameRequest) => Promise<ZarrLoadMaskFrameResponse>
       }
     }
   }

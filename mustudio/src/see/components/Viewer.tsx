@@ -1,9 +1,10 @@
 import { useState, useCallback, useEffect, useLayoutEffect, useRef, useMemo } from "react";
 import { useStore } from "@tanstack/react-store";
 import type { StoreIndex, CropInfo, ZarrStore } from "@/see/lib/zarr";
-import { loadFrame } from "@/see/lib/zarr";
+import { loadFrame, loadMaskFrame, hasMasks } from "@/see/lib/zarr";
 import { loadBatchWithRetryOnTotalFailure } from "@/see/lib/frame-loader";
-import { renderUint16ToCanvas, drawSpots } from "@/see/lib/render";
+import { renderUint16ToCanvas, drawSpots, drawMaskContours } from "@/see/lib/render";
+import { labelMapToContours } from "@/see/lib/contours";
 import {
   type Annotations,
   annotationKey,
@@ -25,6 +26,7 @@ import {
   setAnnotating as persistAnnotating,
   setShowAnnotations as persistShowAnnotations,
   setShowSpots as persistShowSpots,
+  setShowMasks as persistShowMasks,
 } from "@/see/store";
 import { LeftSliceSidebar } from "@/see/components/LeftSliceSidebar";
 import { Slider } from "@/components/ui/slider";
@@ -73,6 +75,7 @@ export function Viewer({ store, index }: ViewerProps) {
   const spotEntries = useStore(viewerStore, (s) => s.spots);
   const showAnnotations = useStore(viewerStore, (s) => s.showAnnotations);
   const showSpots = useStore(viewerStore, (s) => s.showSpots);
+  const showMasks = useStore(viewerStore, (s) => s.showMasks);
 
   // Derive annotations Map from persisted entries
   const annotations: Annotations = useMemo(
@@ -90,6 +93,7 @@ export function Viewer({ store, index }: ViewerProps) {
   const [playing, setPlaying] = useState(false);
   const [frameLoadError, setFrameLoadError] = useState<string | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
+  const [workspaceHasMasks, setWorkspaceHasMasks] = useState(false);
   const [autoContrastDone, setAutoContrastDone] = useState(
     // If we have persisted contrast values that aren't defaults, skip auto
     contrastMin !== 0 || contrastMax !== 65535
@@ -103,6 +107,17 @@ export function Viewer({ store, index }: ViewerProps) {
   const validPos = index.positions.includes(selectedPos)
     ? selectedPos
     : index.positions[0] ?? "";
+
+  useEffect(() => {
+    if (!store?.workspacePath) return;
+    let cancelled = false;
+    hasMasks(store.workspacePath).then((v) => {
+      if (!cancelled) setWorkspaceHasMasks(v);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [store?.workspacePath]);
 
   // Sync if the persisted pos was invalid
   useEffect(() => {
@@ -236,6 +251,16 @@ export function Viewer({ store, index }: ViewerProps) {
           const cropSpots = spots.get(key);
           if (cropSpots) drawSpots(canvas, cropSpots);
         }
+        // Overlay mask contours
+        if (showMasks && workspaceHasMasks) {
+          try {
+            const mask = await loadMaskFrame(store, pageCrops[i].posId, pageCrops[i].cropId, clampedT);
+            const contours = labelMapToContours(mask.data, mask.width, mask.height);
+            drawMaskContours(canvas, contours);
+          } catch {
+            // no mask for this crop or load failed
+          }
+        }
       }
 
       // Force one follow-up repaint after initial data fetch for this view key.
@@ -252,7 +277,7 @@ export function Viewer({ store, index }: ViewerProps) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store, validPos, clampedT, clampedC, clampedZ, clampedPage, contrastMin, contrastMax, autoContrastDone, spots, showSpots, refreshTick]);
+  }, [store, validPos, clampedT, clampedC, clampedZ, clampedPage, contrastMin, contrastMax, autoContrastDone, spots, showSpots, showMasks, workspaceHasMasks, refreshTick]);
 
   const setCanvasRef = useCallback(
     (key: string) => (el: HTMLCanvasElement | null) => {
@@ -547,6 +572,28 @@ export function Viewer({ store, index }: ViewerProps) {
               </>
             )}
           </div>
+
+          {workspaceHasMasks && (
+            <>
+              <div className="h-px bg-border" />
+              <div className="flex flex-col gap-2">
+                <h3 className="font-medium text-xs uppercase text-muted-foreground tracking-wide">Masks</h3>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  className="justify-start"
+                  onClick={() => persistShowMasks(!showMasks)}
+                  title="Toggle mask contours (masks.zarr)"
+                >
+                  {showMasks ? <Eye className="size-3" /> : <EyeOff className="size-3" />}
+                  {showMasks ? "Contours visible" : "Contours hidden"}
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  Cell outlines from masks.zarr
+                </p>
+              </div>
+            </>
+          )}
         </aside>
       </div>
 

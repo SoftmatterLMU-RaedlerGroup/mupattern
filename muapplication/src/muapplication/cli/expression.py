@@ -2,7 +2,7 @@
 
 Commands:
     muexpression analyze --zarr crops.zarr --pos 0 --channel 1 --output expression.csv
-    muexpression plot --input expression.csv --output expression.png
+    muexpression plot --input expression.csv --output ./plots
 """
 
 from __future__ import annotations
@@ -61,13 +61,13 @@ def plot(
     ],
     output: Annotated[
         Path,
-        typer.Option(help="Output plot image path (e.g. expression.png)."),
+        typer.Option(help="Output directory for the two plots (intensity.png, background_corrected_total_fluor.png)."),
     ],
 ) -> None:
-    """Plot intensity over time for every crop (raw and background-subtracted)."""
+    """Plot raw intensity and background-corrected total fluor per crop (two square plots)."""
     typer.echo(f"Loaded {input}")
     run_plot(input, output)
-    typer.echo(f"Saved plot to {output}")
+    typer.echo(f"Saved plots to {output / 'intensity.png'} and {output / 'background_corrected_total_fluor.png'}")
 
 
 def main() -> None:

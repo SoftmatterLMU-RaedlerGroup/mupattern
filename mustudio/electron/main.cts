@@ -84,6 +84,35 @@ interface LoadZarrFrameFailure {
 
 type LoadZarrFrameResponse = LoadZarrFrameSuccess | LoadZarrFrameFailure
 
+interface HasMasksRequest {
+  workspacePath: string
+}
+
+interface HasMasksResponse {
+  hasMasks: boolean
+}
+
+interface LoadMaskFrameRequest {
+  workspacePath: string
+  posId: string
+  cropId: string
+  t: number
+}
+
+interface LoadMaskFrameSuccess {
+  ok: true
+  width: number
+  height: number
+  data: ArrayBuffer
+}
+
+interface LoadMaskFrameFailure {
+  ok: false
+  error: string
+}
+
+type LoadMaskFrameResponse = LoadMaskFrameSuccess | LoadMaskFrameFailure
+
 type ZarrArrayHandle = ZarritaArray<DataType, Readable>
 type ZarrChunk = Awaited<ReturnType<ZarrArrayHandle["getChunk"]>>
 type ZarrLocation = Location<Readable>
@@ -97,6 +126,7 @@ let workspaceDb: Database | null = null
 let zarrModulePromise: Promise<typeof import("zarrita")> | null = null
 let fsStoreCtorPromise: Promise<typeof FileSystemStore> | null = null
 const zarrContextByWorkspacePath = new Map<string, ZarrContext>()
+const masksContextByWorkspacePath = new Map<string, ZarrContext>()
 
 function getWorkspaceDbPath(): string {
   return path.join(app.getPath("userData"), WORKSPACE_DB_FILENAME)
@@ -262,6 +292,39 @@ async function getZarrContext(workspacePath: string): Promise<ZarrContext> {
   return context
 }
 
+async function getMasksContext(workspacePath: string): Promise<ZarrContext> {
+  const existing = masksContextByWorkspacePath.get(workspacePath)
+  if (existing) return existing
+
+  const { zarr, FileSystemStore } = await getZarrDeps()
+  const zarrPath = path.join(workspacePath, "masks.zarr")
+  const store = new FileSystemStore(zarrPath)
+  const root: ZarrLocation = zarr.root(store)
+  const context: ZarrContext = { root, arrays: new Map() }
+  masksContextByWorkspacePath.set(workspacePath, context)
+  return context
+}
+
+async function getCachedMasksArray(
+  workspacePath: string,
+  posId: string,
+  cropId: string
+): Promise<ZarrArrayHandle> {
+  const context = await getMasksContext(workspacePath)
+  const key = `${posId}/${cropId}`
+  let promise = context.arrays.get(key)
+  if (!promise) {
+    const { zarr } = await getZarrDeps()
+    promise = zarr.open(context.root.resolve(`pos/${posId}/crop/${cropId}`), { kind: "array" })
+    promise.catch(() => {
+      const current = context.arrays.get(key)
+      if (current === promise) context.arrays.delete(key)
+    })
+    context.arrays.set(key, promise)
+  }
+  return promise
+}
+
 async function getCachedZarrArray(
   workspacePath: string,
   posId: string,
@@ -397,6 +460,58 @@ async function loadZarrFrame({
   }
 }
 
+async function hasMasks({ workspacePath }: HasMasksRequest): Promise<HasMasksResponse> {
+  try {
+    const masksPath = path.join(workspacePath, "masks.zarr")
+    await access(masksPath, constants.R_OK)
+    const posRoot = path.join(masksPath, "pos")
+    await access(posRoot, constants.R_OK)
+    return { hasMasks: true }
+  } catch {
+    return { hasMasks: false }
+  }
+}
+
+async function loadMaskFrame({
+  workspacePath,
+  posId,
+  cropId,
+  t,
+}: LoadMaskFrameRequest): Promise<LoadMaskFrameResponse> {
+  const key = `${posId}/${cropId}`
+  try {
+    const context = await getMasksContext(workspacePath)
+    let arr = await getCachedMasksArray(workspacePath, posId, cropId)
+    let chunk: ZarrChunk
+    try {
+      chunk = await arr.getChunk([t, 0, 0])
+    } catch {
+      context.arrays.delete(key)
+      arr = await getCachedMasksArray(workspacePath, posId, cropId)
+      chunk = await arr.getChunk([t, 0, 0])
+    }
+
+    const source = chunk.data
+    const typed =
+      source instanceof Uint32Array
+        ? source
+        : Uint32Array.from(source as ArrayLike<number>)
+    const output = new Uint32Array(typed.length)
+    output.set(typed)
+    const height = chunk.shape[chunk.shape.length - 2]
+    const width = chunk.shape[chunk.shape.length - 1]
+    return {
+      ok: true,
+      width,
+      height,
+      data: toArrayBuffer(new Uint8Array(output.buffer)),
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    return { ok: false, error: message || "Failed to load mask frame." }
+  }
+}
+
 async function persistWorkspaceDb(db: Database): Promise<void> {
   const dir = app.getPath("userData")
   const targetPath = getWorkspaceDbPath()
@@ -495,6 +610,14 @@ function registerWorkspaceStateIpc(): void {
 
   ipcMain.handle("zarr:load-frame", async (_event, payload: LoadZarrFrameRequest) => {
     return loadZarrFrame(payload)
+  })
+
+  ipcMain.handle("zarr:has-masks", async (_event, payload: HasMasksRequest) => {
+    return hasMasks(payload)
+  })
+
+  ipcMain.handle("zarr:load-mask-frame", async (_event, payload: LoadMaskFrameRequest) => {
+    return loadMaskFrame(payload)
   })
 }
 
