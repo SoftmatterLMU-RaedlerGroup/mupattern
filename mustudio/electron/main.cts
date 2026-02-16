@@ -357,6 +357,37 @@ async function readShapeFromZarrayFile(cropPath: string): Promise<number[] | nul
   }
 }
 
+/** Resolve requested pos id to actual dir name under posRoot (e.g. 58 → 058 for Python layout). */
+async function resolvePosIds(
+  posRoot: string,
+  positionFilter: string[]
+): Promise<string[]> {
+  let dirNames: string[]
+  try {
+    const entries = await readdir(posRoot, { withFileTypes: true })
+    dirNames = entries.filter((e) => e.isDirectory()).map((e) => e.name)
+  } catch {
+    return []
+  }
+  const resolved: string[] = []
+  for (const requested of positionFilter) {
+    if (dirNames.includes(requested)) {
+      resolved.push(requested)
+      continue
+    }
+    const asNum = Number.parseInt(requested, 10)
+    if (!Number.isNaN(asNum)) {
+      const padded = String(asNum).padStart(3, "0")
+      if (dirNames.includes(padded)) {
+        resolved.push(padded)
+        continue
+      }
+    }
+    resolved.push(requested)
+  }
+  return resolved
+}
+
 async function discoverZarr({
   workspacePath,
   positionFilter,
@@ -367,7 +398,7 @@ async function discoverZarr({
 
   let discoveredPosIds: string[]
   if (positionFilter && positionFilter.length > 0) {
-    discoveredPosIds = positionFilter
+    discoveredPosIds = await resolvePosIds(posRoot, positionFilter)
   } else {
     try {
       const entries = await readdir(posRoot, { withFileTypes: true })
