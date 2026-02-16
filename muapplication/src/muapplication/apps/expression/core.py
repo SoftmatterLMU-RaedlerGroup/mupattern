@@ -27,27 +27,26 @@ def run_analyze(
 
     bg_arr = root[f"pos/{pos:03d}/background"]
 
-    rows: list[tuple[int, str, int, float]] = []
+    rows: list[tuple[int, str, int, int, float]] = []
     total = len(crop_ids)
     for i, crop_id in enumerate(crop_ids):
         arr = crop_grp[crop_id]
         n_times = arr.shape[0]
-        n_pixels = arr.shape[3] * arr.shape[4]  # h * w
+        area = arr.shape[3] * arr.shape[4]  # h * w
 
         for t in range(n_times):
             intensity = int(np.array(arr[t, channel, 0]).sum())
-            bg_per_pixel = float(bg_arr[t, channel, 0])
-            background = bg_per_pixel * n_pixels
-            rows.append((t, crop_id, intensity, background))
+            background = float(bg_arr[t, channel, 0])  # per-pixel
+            rows.append((t, crop_id, intensity, area, background))
 
         if on_progress and total > 0:
             on_progress((i + 1) / total, f"Processing crop {i + 1}/{total}")
 
     output.parent.mkdir(parents=True, exist_ok=True)
     with open(output, "w", newline="") as fh:
-        fh.write("t,crop,intensity,background\n")
-        for t, crop, intensity, background in rows:
-            fh.write(f"{t},{crop},{intensity},{background}\n")
+        fh.write("t,crop,intensity,area,background\n")
+        for t, crop, intensity, area, background in rows:
+            fh.write(f"{t},{crop},{intensity},{area},{background}\n")
 
     if on_progress:
         on_progress(1.0, f"Wrote {len(rows)} rows to {output}")
@@ -73,7 +72,7 @@ def run_plot(input_csv: Path, output: Path) -> None:
         ax_raw.plot(group["t"], group["intensity"], linewidth=0.5, alpha=0.4)
         ax_sub.plot(
             group["t"],
-            group["intensity"] - group["background"],
+            group["intensity"] - group["background"] * group["area"],
             linewidth=0.5,
             alpha=0.4,
         )

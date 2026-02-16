@@ -26,6 +26,7 @@ dependencies = [
     "scikit-learn>=1.4",
     "spotiflow>=0.5",
     "customtkinter>=5.0",
+    "cellpose>=4.0",
 ]
 
 [project.scripts]

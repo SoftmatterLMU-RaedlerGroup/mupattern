@@ -56,7 +56,7 @@ def plot(
             "--input",
             exists=True,
             dir_okay=False,
-            help="CSV from 'muexpression analyze' (t,crop,intensity,background).",
+            help="CSV from 'muexpression analyze' (t,crop,intensity,area,background).",
         ),
     ],
     output: Annotated[
