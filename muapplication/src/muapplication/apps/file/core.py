@@ -160,12 +160,6 @@ def run_convert(
     dim_order = [d for d in sizes.keys() if d not in ("Y", "X")]
     dask_arr = f.to_dask()
 
-    pos_names = [f"Pos{i}" for i in range(n_pos)]
-
-    def _pos_number(name: str) -> int:
-        m = re.search(r"(\d+)", name)
-        return int(m.group(1)) if m else 0
-
     pos_indices = parse_slice_string(pos_slice, n_pos)
     time_indices = parse_slice_string(time_slice, n_time)
 
@@ -181,9 +175,7 @@ def run_convert(
 
     done = 0
     for p_idx in pos_indices:
-        pos_name = pos_names[p_idx]
-        pos_num = _pos_number(pos_name)
-        pos_dir = output / pos_name
+        pos_dir = output / f"Pos{p_idx}"
         pos_dir.mkdir(exist_ok=True)
 
         with open(pos_dir / "time_map.csv", "w", newline="") as fh:
@@ -201,7 +193,7 @@ def run_convert(
 
                     fname = (
                         f"img_channel{c:03d}"
-                        f"_position{pos_num:03d}"
+                        f"_position{p_idx:03d}"
                         f"_time{t_new:09d}"
                         f"_z{z:03d}.tif"
                     )

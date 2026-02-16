@@ -128,7 +128,6 @@ def convert(
         raise typer.BadParameter(str(e)) from e
 
     total = len(pos_indices) * len(time_indices) * n_chan * n_z
-    pos_names = [f"Pos{i}" for i in range(n_pos)]
 
     typer.echo(f"ND2: {n_pos} positions, T={n_time}, C={n_chan}, Z={n_z}")
     typer.echo("")
@@ -140,7 +139,7 @@ def convert(
     typer.echo(f"Total frames to write: {total}")
     typer.echo("")
     typer.echo("Positions:")
-    typer.echo(f"  {', '.join(pos_names[i] for i in pos_indices)}")
+    typer.echo(f"  {', '.join(f'Pos{i}' for i in pos_indices)}")
     typer.echo("")
     typer.echo("Timepoints (original indices):")
     typer.echo(f"  {time_indices}")
