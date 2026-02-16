@@ -160,21 +160,7 @@ def run_convert(
     dim_order = [d for d in sizes.keys() if d not in ("Y", "X")]
     dask_arr = f.to_dask()
 
-    pos_names: list[str | None] = []
-    try:
-        exp = f.experiment
-        if exp:
-            for loop in exp:
-                if loop.type == "XYPosLoop":
-                    pos_names = [p.name for p in loop.parameters.points]
-                    break
-    except Exception:
-        pass
-
-    pos_names = [
-        name if name else f"Pos{i}"
-        for i, name in enumerate(pos_names)
-    ] or [f"Pos{i}" for i in range(n_pos)]
+    pos_names = [f"Pos{i}" for i in range(n_pos)]
 
     def _pos_number(name: str) -> int:
         m = re.search(r"(\d+)", name)
