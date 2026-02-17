@@ -27,6 +27,8 @@ dependencies = [
     "spotiflow>=0.5",
     "customtkinter>=5.0",
     "cellpose>=4.0",
+    "cellSAM @ git+https://github.com/vanvalenlab/cellSAM.git",
+    "scikit-image>=0.22",
 ]
 
 [project.scripts]
@@ -40,6 +42,9 @@ muapplication-spot-gui = "muapplication.gui.spot:main"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.uv]
 package = true

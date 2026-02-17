@@ -85,7 +85,8 @@ interface LoadZarrFrameFailure {
 type LoadZarrFrameResponse = LoadZarrFrameSuccess | LoadZarrFrameFailure
 
 interface HasMasksRequest {
-  workspacePath: string
+  /** Absolute path to masks zarr folder (e.g. .../masks_fl.zarr). No default. */
+  masksPath: string
 }
 
 interface HasMasksResponse {
@@ -93,7 +94,7 @@ interface HasMasksResponse {
 }
 
 interface LoadMaskFrameRequest {
-  workspacePath: string
+  masksPath: string
   posId: string
   cropId: string
   t: number
@@ -126,7 +127,8 @@ let workspaceDb: Database | null = null
 let zarrModulePromise: Promise<typeof import("zarrita")> | null = null
 let fsStoreCtorPromise: Promise<typeof FileSystemStore> | null = null
 const zarrContextByWorkspacePath = new Map<string, ZarrContext>()
-const masksContextByWorkspacePath = new Map<string, ZarrContext>()
+/** Keyed by absolute masks zarr path (user picks via Load). */
+const masksContextByMasksPath = new Map<string, ZarrContext>()
 
 function getWorkspaceDbPath(): string {
   return path.join(app.getPath("userData"), WORKSPACE_DB_FILENAME)
@@ -292,25 +294,24 @@ async function getZarrContext(workspacePath: string): Promise<ZarrContext> {
   return context
 }
 
-async function getMasksContext(workspacePath: string): Promise<ZarrContext> {
-  const existing = masksContextByWorkspacePath.get(workspacePath)
+async function getMasksContext(masksPath: string): Promise<ZarrContext> {
+  const existing = masksContextByMasksPath.get(masksPath)
   if (existing) return existing
 
   const { zarr, FileSystemStore } = await getZarrDeps()
-  const zarrPath = path.join(workspacePath, "masks.zarr")
-  const store = new FileSystemStore(zarrPath)
+  const store = new FileSystemStore(masksPath)
   const root: ZarrLocation = zarr.root(store)
   const context: ZarrContext = { root, arrays: new Map() }
-  masksContextByWorkspacePath.set(workspacePath, context)
+  masksContextByMasksPath.set(masksPath, context)
   return context
 }
 
 async function getCachedMasksArray(
-  workspacePath: string,
+  masksPath: string,
   posId: string,
   cropId: string
 ): Promise<ZarrArrayHandle> {
-  const context = await getMasksContext(workspacePath)
+  const context = await getMasksContext(masksPath)
   const key = `${posId}/${cropId}`
   let promise = context.arrays.get(key)
   if (!promise) {
@@ -491,9 +492,8 @@ async function loadZarrFrame({
   }
 }
 
-async function hasMasks({ workspacePath }: HasMasksRequest): Promise<HasMasksResponse> {
+async function hasMasks({ masksPath }: HasMasksRequest): Promise<HasMasksResponse> {
   try {
-    const masksPath = path.join(workspacePath, "masks.zarr")
     await access(masksPath, constants.R_OK)
     const posRoot = path.join(masksPath, "pos")
     await access(posRoot, constants.R_OK)
@@ -503,22 +503,39 @@ async function hasMasks({ workspacePath }: HasMasksRequest): Promise<HasMasksRes
   }
 }
 
+async function pickMasksDirectory(): Promise<{ path: string } | null> {
+  const result = await dialog.showOpenDialog({
+    title: "Select masks zarr folder",
+    properties: ["openDirectory"],
+  })
+  if (result.canceled || result.filePaths.length === 0) return null
+  const chosen = result.filePaths[0]
+  try {
+    await access(chosen, constants.R_OK)
+    const posRoot = path.join(chosen, "pos")
+    await access(posRoot, constants.R_OK)
+  } catch {
+    return null
+  }
+  return { path: chosen }
+}
+
 async function loadMaskFrame({
-  workspacePath,
+  masksPath,
   posId,
   cropId,
   t,
 }: LoadMaskFrameRequest): Promise<LoadMaskFrameResponse> {
   const key = `${posId}/${cropId}`
   try {
-    const context = await getMasksContext(workspacePath)
-    let arr = await getCachedMasksArray(workspacePath, posId, cropId)
+    const context = await getMasksContext(masksPath)
+    let arr = await getCachedMasksArray(masksPath, posId, cropId)
     let chunk: ZarrChunk
     try {
       chunk = await arr.getChunk([t, 0, 0])
     } catch {
       context.arrays.delete(key)
-      arr = await getCachedMasksArray(workspacePath, posId, cropId)
+      arr = await getCachedMasksArray(masksPath, posId, cropId)
       chunk = await arr.getChunk([t, 0, 0])
     }
 
@@ -649,6 +666,10 @@ function registerWorkspaceStateIpc(): void {
 
   ipcMain.handle("zarr:load-mask-frame", async (_event, payload: LoadMaskFrameRequest) => {
     return loadMaskFrame(payload)
+  })
+
+  ipcMain.handle("zarr:pick-masks-dir", async () => {
+    return pickMasksDirectory()
   })
 }
 

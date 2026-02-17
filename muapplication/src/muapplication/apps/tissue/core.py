@@ -1,4 +1,4 @@
-"""mutissue core – segment crops with Cellpose v4, measure per-cell fluorescence. Used by CLI and API."""
+"""mutissue core – segment crops with Cellpose v4 or fluo-only watershed, measure per-cell fluorescence. Used by CLI and API."""
 
 from __future__ import annotations
 
@@ -6,8 +6,133 @@ from pathlib import Path
 
 import numpy as np
 import zarr
+from scipy import ndimage
+from skimage.segmentation import watershed
 
 from ...common.progress import ProgressCallback
+
+
+def _segment_frame_peaks(
+    fluo: np.ndarray,
+    *,
+    sigma: float = 2.0,
+    min_distance: int = 5,
+    min_intensity: float = 0.0,
+) -> np.ndarray:
+    """Segment a single frame using fluorescence local maxima + Voronoi. Returns uint32 mask (0=bg, 1..N=cells)."""
+    fluo = np.asarray(fluo, dtype=np.float64)
+    if sigma > 0:
+        fluo = ndimage.gaussian_filter(fluo, sigma=sigma, mode="nearest")
+    size = max(3, 2 * min_distance + 1)
+    max_filtered = ndimage.maximum_filter(fluo, size=size, mode="nearest")
+    peak_mask = (fluo >= max_filtered) & (fluo > min_intensity)
+    # One pixel per peak: label connected plateau, then take centroid per component
+    labeled_plateaus, n_plateaus = ndimage.label(peak_mask)
+    if n_plateaus == 0:
+        return np.zeros(fluo.shape, dtype=np.uint32)
+    seed_label = np.zeros(fluo.shape, dtype=np.int32)
+    for i in range(1, n_plateaus + 1):
+        ys, xs = np.where(labeled_plateaus == i)
+        # use pixel with max intensity in this plateau as seed
+        idx = np.argmax(fluo[ys, xs])
+        sy, sx = int(ys[idx]), int(xs[idx])
+        seed_label[sy, sx] = i
+    seed_binary = seed_label > 0
+    _, indices = ndimage.distance_transform_edt(~seed_binary, return_indices=True)
+    labels = seed_label[indices[0], indices[1]]
+    return np.asarray(labels, dtype=np.uint32)
+
+
+def _segment_frame_watershed(
+    fluo: np.ndarray,
+    background: float,
+    *,
+    sigma: float = 2.0,
+    margin: float = 0.0,
+    min_distance: int = 5,
+) -> np.ndarray:
+    """Blur, threshold with background; watershed on foreground only. Returns uint32 mask (0=bg, 1..N=nuclei)."""
+    fluo = np.asarray(fluo, dtype=np.float64)
+    if sigma > 0:
+        fluo = ndimage.gaussian_filter(fluo, sigma=sigma, mode="nearest")
+    foreground = fluo > (background + margin)
+    if not np.any(foreground):
+        return np.zeros(fluo.shape, dtype=np.uint32)
+    dist = ndimage.distance_transform_edt(foreground)
+    size = max(3, 2 * min_distance + 1)
+    max_dist = ndimage.maximum_filter(dist, size=size, mode="nearest")
+    peak_mask = (dist >= max_dist) & (dist > 0.5)
+    markers, n_seeds = ndimage.label(peak_mask)
+    if n_seeds == 0:
+        return np.zeros(fluo.shape, dtype=np.uint32)
+    ws = watershed(-dist, markers, mask=foreground)
+    return np.asarray(ws, dtype=np.uint32)
+
+
+def run_segment_watershed(
+    zarr_path: Path,
+    pos: int,
+    channel_fluorescence: int,
+    output_masks: Path,
+    *,
+    sigma: float = 2.0,
+    margin: float = 0.0,
+    min_distance: int = 5,
+    on_progress: ProgressCallback | None = None,
+) -> None:
+    """Segment each crop per frame: blur, threshold with background (or median of frame), watershed on foreground. Same masks.zarr layout."""
+    store = zarr.DirectoryStore(str(zarr_path))
+    root = zarr.open_group(store, mode="r")
+    pos_grp = root[f"pos/{pos:03d}"]
+    crop_grp = pos_grp["crop"]
+    crop_ids = sorted(crop_grp.keys())
+    try:
+        bg_arr = pos_grp["background"]
+    except KeyError:
+        bg_arr = None
+
+    out_store = zarr.DirectoryStore(str(output_masks))
+    out_root = zarr.open_group(out_store, mode="a")
+    out_pos_grp = out_root.require_group(f"pos/{pos:03d}")
+    mask_crop_grp = out_pos_grp.require_group("crop")
+
+    n_crops = len(crop_ids)
+    total_work = sum(int(crop_grp[cid].shape[0]) for cid in crop_ids)
+    done = 0
+
+    for crop_idx, crop_id in enumerate(crop_ids):
+        arr = crop_grp[crop_id]
+        n_times, _, _, h, w = arr.shape
+        mask_arr = mask_crop_grp.zeros(
+            crop_id,
+            shape=(n_times, h, w),
+            chunks=(1, h, w),
+            dtype=np.uint32,
+            overwrite=True,
+        )
+        mask_arr.attrs["axis_names"] = ["t", "y", "x"]
+
+        for t in range(n_times):
+            fluo = np.array(arr[t, channel_fluorescence, 0], dtype=np.float64)
+            if bg_arr is not None:
+                background = float(bg_arr[t, channel_fluorescence, 0])
+            else:
+                background = float(np.median(fluo))
+            masks = _segment_frame_watershed(
+                fluo,
+                background,
+                sigma=sigma,
+                margin=margin,
+                min_distance=min_distance,
+            )
+            mask_arr[t] = masks
+
+            done += 1
+            if on_progress and total_work > 0:
+                on_progress(done / total_work, f"Crop {crop_idx + 1}/{n_crops}, frame {t + 1}/{n_times}")
+
+    if on_progress:
+        on_progress(1.0, "Done")
 
 
 def run_segment(
@@ -17,20 +142,33 @@ def run_segment(
     channel_fluorescence: int,
     output_masks: Path,
     *,
+    backend: str = "cellpose",
     on_progress: ProgressCallback | None = None,
 ) -> None:
-    """Segment each crop per frame with Cellpose v4 (phase + fluorescence), save masks to masks.zarr (same layout as crops)."""
-    from cellpose.models import CellposeModel
-
+    """Segment each crop per frame with Cellpose or CellSAM (phase + fluorescence), save masks to masks.zarr (same layout as crops)."""
     store = zarr.DirectoryStore(str(zarr_path))
     root = zarr.open_group(store, mode="r")
     crop_grp = root[f"pos/{pos:03d}/crop"]
     crop_ids = sorted(crop_grp.keys())
 
-    try:
-        model = CellposeModel(pretrained_model="cpsam", gpu=True)
-    except Exception:
-        model = CellposeModel(pretrained_model="cpsam", gpu=False)
+    if backend == "cellpose":
+        from cellpose.models import CellposeModel
+
+        try:
+            model = CellposeModel(pretrained_model="cpsam", gpu=True)
+        except Exception:
+            model = CellposeModel(pretrained_model="cpsam", gpu=False)
+    elif backend == "cellsam":
+        import torch
+
+        from cellSAM import get_model, segment_cellular_image
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        model = get_model()
+        model = model.to(device)
+        model.eval()
+    else:
+        raise ValueError(f"Unknown segment backend {backend!r}. Use 'cellpose' or 'cellsam'.")
 
     out_store = zarr.DirectoryStore(str(output_masks))
     out_root = zarr.open_group(out_store, mode="a")
@@ -58,13 +196,20 @@ def run_segment(
             fluo = np.array(arr[t, channel_fluorescence, 0], dtype=np.float32)
             image = np.stack([phase, fluo, phase], axis=-1)
 
-            masks_list, *_ = model.eval(
-                [image],
-                channel_axis=-1,
-                batch_size=1,
-                normalize=True,
-            )
-            masks = masks_list[0] if isinstance(masks_list, list) else masks_list
+            if backend == "cellpose":
+                masks_list, *_ = model.eval(
+                    [image],
+                    channel_axis=-1,
+                    batch_size=1,
+                    normalize=True,
+                )
+                masks = masks_list[0] if isinstance(masks_list, list) else masks_list
+            else:
+                mask, _, _ = segment_cellular_image(
+                    image, model=model, normalize=True, device=device
+                )
+                masks = np.asarray(mask, dtype=np.uint32)
+
             mask_arr[t] = np.asarray(masks, dtype=np.uint32)
 
             done += 1
@@ -72,7 +217,7 @@ def run_segment(
                 on_progress(done / total_work, f"Crop {crop_idx + 1}/{n_crops}, frame {t + 1}/{n_times}")
 
     if on_progress:
-        on_progress(1.0, f"Wrote masks to {output_masks}")
+        on_progress(1.0, "Done")
 
 
 def run_analyze(
@@ -111,7 +256,10 @@ def run_analyze(
         for t in range(n_times):
             fluo = np.array(crop_arr[t, channel_fluorescence, 0], dtype=np.float64)
             masks = np.array(mask_arr[t])
-            background = float(bg_arr[t, channel_fluorescence, 0]) if bg_arr is not None else 0.0  # per-pixel
+            if bg_arr is not None:
+                background = float(bg_arr[t, channel_fluorescence, 0])
+            else:
+                background = float(np.median(fluo))
             for cell_id in np.unique(masks):
                 if cell_id == 0:
                     continue

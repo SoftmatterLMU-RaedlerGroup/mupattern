@@ -17,6 +17,7 @@ import {
   viewerStore,
   setAnnotations as persistAnnotations,
   setSpots as persistSpots,
+  setMasksPath as persistMasksPath,
   setSelectedPos as persistSelectedPos,
   setT as persistT,
   setC as persistC,
@@ -76,6 +77,7 @@ export function Viewer({ store, index }: ViewerProps) {
   const showAnnotations = useStore(viewerStore, (s) => s.showAnnotations);
   const showSpots = useStore(viewerStore, (s) => s.showSpots);
   const showMasks = useStore(viewerStore, (s) => s.showMasks);
+  const masksPath = useStore(viewerStore, (s) => s.masksPath);
 
   // Derive annotations Map from persisted entries
   const annotations: Annotations = useMemo(
@@ -109,15 +111,18 @@ export function Viewer({ store, index }: ViewerProps) {
     : index.positions[0] ?? "";
 
   useEffect(() => {
-    if (!store?.workspacePath) return;
+    if (!masksPath) {
+      setWorkspaceHasMasks(false);
+      return;
+    }
     let cancelled = false;
-    hasMasks(store.workspacePath).then((v) => {
+    hasMasks(masksPath).then((v) => {
       if (!cancelled) setWorkspaceHasMasks(v);
     });
     return () => {
       cancelled = true;
     };
-  }, [store?.workspacePath]);
+  }, [masksPath]);
 
   // Sync if the persisted pos was invalid
   useEffect(() => {
@@ -252,9 +257,9 @@ export function Viewer({ store, index }: ViewerProps) {
           if (cropSpots) drawSpots(canvas, cropSpots);
         }
         // Overlay mask contours
-        if (showMasks && workspaceHasMasks) {
+        if (showMasks && workspaceHasMasks && masksPath) {
           try {
-            const mask = await loadMaskFrame(store, pageCrops[i].posId, pageCrops[i].cropId, clampedT);
+            const mask = await loadMaskFrame(masksPath, pageCrops[i].posId, pageCrops[i].cropId, clampedT);
             const contours = labelMapToContours(mask.data, mask.width, mask.height);
             drawMaskContours(canvas, contours);
           } catch {
@@ -343,6 +348,15 @@ export function Viewer({ store, index }: ViewerProps) {
       // user cancelled
     }
   }, [validPos, spots, setSpots]);
+
+  const handleLoadMasks = useCallback(async () => {
+    try {
+      const result = await window.mustudio.zarr.pickMasksDirectory();
+      if (result) persistMasksPath(result.path);
+    } catch (e) {
+      setFrameLoadError(e instanceof Error ? e.message : String(e));
+    }
+  }, []);
 
   // Build set of cropIds that have any annotation (at any timepoint) for current position
   const annotatedCrops = useMemo(() => {
@@ -573,27 +587,42 @@ export function Viewer({ store, index }: ViewerProps) {
             )}
           </div>
 
-          {workspaceHasMasks && (
-            <>
-              <div className="h-px bg-border" />
-              <div className="flex flex-col gap-2">
-                <h3 className="font-medium text-xs uppercase text-muted-foreground tracking-wide">Masks</h3>
+          <div className="h-px bg-border" />
+          <div className="flex flex-col gap-2">
+            <h3 className="font-medium text-xs uppercase text-muted-foreground tracking-wide">Masks</h3>
+            <Button
+              variant="ghost"
+              size="xs"
+              className="justify-start"
+              onClick={handleLoadMasks}
+              title="Load masks zarr folder"
+            >
+              <Upload className="size-3.5" />
+              Load
+            </Button>
+            {masksPath != null && (
+              <>
+                <div className="flex items-center gap-1">
+                  <p className="text-xs text-muted-foreground truncate flex-1 min-w-0" title={masksPath}>
+                    {masksPath.split(/[/\\]/).filter(Boolean).pop() ?? "Masks"}
+                  </p>
+                  <Button variant="ghost" size="icon-xs" onClick={() => persistMasksPath(null)} title="Clear masks">
+                    ×
+                  </Button>
+                </div>
                 <Button
                   variant="ghost"
                   size="xs"
                   className="justify-start"
                   onClick={() => persistShowMasks(!showMasks)}
-                  title="Toggle mask contours (masks.zarr)"
+                  title="Toggle mask contours"
                 >
                   {showMasks ? <Eye className="size-3" /> : <EyeOff className="size-3" />}
                   {showMasks ? "Contours visible" : "Contours hidden"}
                 </Button>
-                <p className="text-xs text-muted-foreground">
-                  Cell outlines from masks.zarr
-                </p>
-              </div>
-            </>
-          )}
+              </>
+            )}
+          </div>
         </aside>
       </div>
 

@@ -100,7 +100,7 @@ interface ZarrLoadFrameFailure {
 type ZarrLoadFrameResponse = ZarrLoadFrameSuccess | ZarrLoadFrameFailure
 
 interface ZarrHasMasksRequest {
-  workspacePath: string
+  masksPath: string
 }
 
 interface ZarrHasMasksResponse {
@@ -108,7 +108,7 @@ interface ZarrHasMasksResponse {
 }
 
 interface ZarrLoadMaskFrameRequest {
-  workspacePath: string
+  masksPath: string
   posId: string
   cropId: string
   t: number
@@ -148,6 +148,7 @@ declare global {
         loadFrame: (request: ZarrLoadFrameRequest) => Promise<ZarrLoadFrameResponse>
         hasMasks: (request: ZarrHasMasksRequest) => Promise<ZarrHasMasksResponse>
         loadMaskFrame: (request: ZarrLoadMaskFrameRequest) => Promise<ZarrLoadMaskFrameResponse>
+        pickMasksDirectory: () => Promise<{ path: string } | null>
       }
     }
   }

@@ -1,7 +1,11 @@
-"""muapplication tissue – segment multi-cell crops with Cellpose v4, measure per-cell GFP fluorescence.
+"""muapplication tissue – segment multi-cell crops, measure per-cell GFP fluorescence.
 
 Commands:
-    muapplication tissue segment --zarr crops.zarr --pos 0 --channel-phase 0 --channel-fluorescence 1 --output masks.zarr
+    # cellpose or cellsam (phase + fluorescence):
+    muapplication tissue segment --zarr crops.zarr --pos 0 --method cellpose --channel-phase 0 --channel-fluorescence 1 --output masks.zarr
+    muapplication tissue segment --zarr crops.zarr --pos 0 --method cellsam --channel-phase 0 --channel-fluorescence 1 --output masks.zarr
+    # watershed (fluo-only):
+    muapplication tissue segment --zarr crops.zarr --pos 0 --method watershed --channel-fluorescence 1 --output masks.zarr
     muapplication tissue analyze --zarr crops.zarr --masks masks.zarr --pos 0 --channel-fluorescence 1 --output tissue.csv
     muapplication tissue plot --input tissue.csv --output tissue.png --gfp-threshold 100.0
 """
@@ -13,11 +17,11 @@ from typing import Annotated
 
 import typer
 
-from ..apps.tissue.core import run_analyze, run_plot, run_segment
+from ..apps.tissue.core import run_analyze, run_plot, run_segment, run_segment_watershed
 
 app = typer.Typer(
     add_completion=False,
-    help="Segment crops with Cellpose v4 (phase + fluorescence), measure per-cell total fluorescence.",
+    help="Segment crops: method cellpose | cellsam | watershed; measure per-cell total fluorescence.",
 )
 
 
@@ -35,10 +39,6 @@ def segment(
         int,
         typer.Option("--pos", help="Position index."),
     ],
-    channel_phase: Annotated[
-        int,
-        typer.Option("--channel-phase", help="Channel index for phase contrast."),
-    ],
     channel_fluorescence: Annotated[
         int,
         typer.Option("--channel-fluorescence", help="Channel index for fluorescence (e.g. GFP)."),
@@ -47,19 +47,61 @@ def segment(
         Path,
         typer.Option("--output", help="Output masks zarr path (e.g. masks.zarr), same layout as crops."),
     ],
+    method: Annotated[
+        str,
+        typer.Option("--method", help="Segment method: 'cellpose' | 'cellsam' | 'watershed'."),
+    ] = "cellpose",
+    channel_phase: Annotated[
+        int | None,
+        typer.Option("--channel-phase", help="Channel index for phase contrast (required when method=cellpose or method=cellsam)."),
+    ] = None,
+    sigma: Annotated[
+        float,
+        typer.Option("--sigma", help="Gaussian blur sigma before thresholding (watershed method)."),
+    ] = 2.0,
+    margin: Annotated[
+        float,
+        typer.Option("--margin", help="Add this to background for threshold (watershed method: fluo > background + margin)."),
+    ] = 0.0,
+    min_distance: Annotated[
+        int,
+        typer.Option("--min-distance", help="Minimum pixels between watershed seeds (watershed method)."),
+    ] = 5,
 ) -> None:
-    """Run Cellpose v4 on each crop/frame, save segmentation masks to masks.zarr."""
-    typer.echo(
-        f"Segmenting pos {pos:03d}, channels phase={channel_phase} fluo={channel_fluorescence} from {zarr_path}"
-    )
-    run_segment(
-        zarr_path,
-        pos,
-        channel_phase,
-        channel_fluorescence,
-        output,
-        on_progress=_progress_echo,
-    )
+    """Segment each crop/frame; save masks to masks.zarr. Methods: cellpose (phase+fluo), cellsam (phase+fluo), watershed (fluo-only)."""
+    if method in ("cellpose", "cellsam"):
+        if channel_phase is None:
+            typer.echo(f"When --method {method}, --channel-phase is required.", err=True)
+            raise typer.Exit(1)
+        typer.echo(
+            f"Segmenting pos {pos:03d}, method={method}, phase={channel_phase} fluo={channel_fluorescence} from {zarr_path}"
+        )
+        run_segment(
+            zarr_path,
+            pos,
+            channel_phase,
+            channel_fluorescence,
+            output,
+            backend=method,
+            on_progress=_progress_echo,
+        )
+    elif method == "watershed":
+        typer.echo(
+            f"Segmenting pos {pos:03d}, method=watershed (fluo-only), channel={channel_fluorescence} from {zarr_path}"
+        )
+        run_segment_watershed(
+            zarr_path,
+            pos,
+            channel_fluorescence,
+            output,
+            sigma=sigma,
+            margin=margin,
+            min_distance=min_distance,
+            on_progress=_progress_echo,
+        )
+    else:
+        typer.echo(f"Unknown --method {method!r}. Use 'cellpose', 'cellsam', or 'watershed'.", err=True)
+        raise typer.Exit(1)
     typer.echo(f"Wrote masks to {output}")
 
 

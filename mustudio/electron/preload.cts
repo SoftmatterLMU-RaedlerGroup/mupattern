@@ -18,5 +18,6 @@ contextBridge.exposeInMainWorld("mustudio", {
     loadFrame: (request: unknown) => ipcRenderer.invoke("zarr:load-frame", request),
     hasMasks: (request: unknown) => ipcRenderer.invoke("zarr:has-masks", request),
     loadMaskFrame: (request: unknown) => ipcRenderer.invoke("zarr:load-mask-frame", request),
+    pickMasksDirectory: () => ipcRenderer.invoke("zarr:pick-masks-dir") as Promise<{ path: string } | null>,
   },
 })

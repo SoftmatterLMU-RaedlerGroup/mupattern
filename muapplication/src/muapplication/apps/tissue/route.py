@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from ...common.jobs import get_job_manager
 from ...common.types import JobRecord
-from .core import run_analyze, run_plot, run_segment
+from .core import run_analyze, run_plot, run_segment, run_segment_watershed
 
 router = APIRouter(tags=["tissue"])
 
@@ -16,9 +16,13 @@ router = APIRouter(tags=["tissue"])
 class SegmentRequest(BaseModel):
     zarr_path: str
     pos: int
-    channel_phase: int
     channel_fluorescence: int
     output: str
+    method: str = "cellpose"  # "cellpose" | "cellsam" | "watershed"
+    channel_phase: int | None = None  # required when method=cellpose or cellsam
+    sigma: float = 2.0
+    margin: float = 0.0
+    min_distance: int = 5
 
 
 class AnalyzeRequest(BaseModel):
@@ -49,14 +53,32 @@ def _submit(kind: str, payload: dict, fn):
 @router.post("/jobs/tissue.segment", response_model=JobRecord)
 def tissue_segment(req: SegmentRequest) -> JobRecord:
     def fn(request: dict, on_progress):
-        run_segment(
-            Path(request["zarr_path"]),
-            request["pos"],
-            request["channel_phase"],
-            request["channel_fluorescence"],
-            Path(request["output"]),
-            on_progress=on_progress,
-        )
+        method = request.get("method", "cellpose")
+        if method in ("cellpose", "cellsam"):
+            if request.get("channel_phase") is None:
+                raise ValueError("channel_phase is required when method=cellpose or method=cellsam")
+            run_segment(
+                Path(request["zarr_path"]),
+                request["pos"],
+                request["channel_phase"],
+                request["channel_fluorescence"],
+                Path(request["output"]),
+                backend=method,
+                on_progress=on_progress,
+            )
+        elif method == "watershed":
+            run_segment_watershed(
+                Path(request["zarr_path"]),
+                request["pos"],
+                request["channel_fluorescence"],
+                Path(request["output"]),
+                sigma=request.get("sigma", 2.0),
+                margin=request.get("margin", 0.0),
+                min_distance=request.get("min_distance", 5),
+                on_progress=on_progress,
+            )
+        else:
+            raise ValueError(f"Unknown method {method!r}. Use 'cellpose', 'cellsam', or 'watershed'.")
 
     return _submit("tissue.segment", req.model_dump(), fn)
 
