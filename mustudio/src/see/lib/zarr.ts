@@ -92,3 +92,39 @@ export async function loadFrame(
     width: response.width,
   }
 }
+
+/**
+ * Check whether the given masks zarr path exists and has pos/ layout.
+ */
+export async function hasMasks(masksPath: string): Promise<boolean> {
+  const response = await window.mustudio.zarr.hasMasks({ masksPath })
+  return response.hasMasks
+}
+
+/**
+ * Load a single mask frame (t) for a crop → { data, height, width }.
+ * Layout: masks.zarr/pos/{posId}/crop/{cropId} with (T, H, W) uint32.
+ */
+export async function loadMaskFrame(
+  masksPath: string,
+  posId: string,
+  cropId: string,
+  t: number
+): Promise<{ data: Uint32Array; height: number; width: number }> {
+  const response = await window.mustudio.zarr.loadMaskFrame({
+    masksPath,
+    posId,
+    cropId,
+    t,
+  })
+
+  if (!response.ok) {
+    throw new Error(response.error)
+  }
+
+  return {
+    data: new Uint32Array(response.data),
+    height: response.height,
+    width: response.width,
+  }
+}

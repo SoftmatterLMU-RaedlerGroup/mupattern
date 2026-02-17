@@ -45,6 +45,14 @@ ND2 ──► muapplication file convert ──► raw TIFFs ──► /register
                                                         ▼
                                                 muapplication expression plot ──► expression plots
 
+                                            muapplication tissue segment ──► masks.zarr
+                                                        │
+                                                        ▼
+                                muapplication tissue analyze (crops + masks) ──► tissue CSV
+                                                        │
+                                                        ▼
+                                                muapplication tissue plot ──► tissue plots
+
                                                   muapplication spot detect ──► spots CSV
                                                         │
                                                         ▼
@@ -57,7 +65,7 @@ ND2 ──► muapplication file convert ──► raw TIFFs ──► /register
 |---------|----------|-------------|
 | `mupattern/` | React/Vite | Web app: simple landing page + pattern registration (Register) + crop viewer (See) |
 | `mustudio/` | Electron + React/Vite | Desktop app: workspace dashboard + workspace-integrated Register/See experience |
-| `muapplication/` | Python backend (CLI/API/GUI) | Unified backend with file, kill, expression, and spot domains for MuStudio |
+| `muapplication/` | Python backend (CLI/API/GUI) | Unified backend with file, kill, expression, spot, and tissue domains for MuStudio |
 
 ## Prerequisites
 
@@ -293,7 +301,39 @@ The `plot` command generates two panels:
 
 Death times at `t=0` are excluded — a crop absent at `t=0` means no cell was ever present on that pattern site, not a death event.
 
-### 8. Detect spots (muapplication spot)
+### 8. Tissue — multi-cell crops (muapplication tissue)
+
+For crops with multiple cells per pattern (e.g. ~10 cells, phase + fluorescence), segment with Cellpose v4 and measure per-cell GFP expression.
+
+```bash
+# Segment: run Cellpose on each crop/frame, save masks (same layout as crops)
+uv run muapplication tissue segment \
+  --zarr /path/to/crops.zarr \
+  --pos 0 \
+  --channel-phase 0 \
+  --channel-fluorescence 1 \
+  --output /path/to/masks.zarr
+
+# Analyze: load crops + masks, compute per-cell total fluorescence, area, background
+uv run muapplication tissue analyze \
+  --zarr /path/to/crops.zarr \
+  --masks /path/to/masks.zarr \
+  --pos 0 \
+  --channel-fluorescence 1 \
+  --output /path/to/tissue.csv
+
+# Plot: GFP+ count and mean/median intensity above background over time
+uv run muapplication tissue plot \
+  --input /path/to/tissue.csv \
+  --output /path/to/tissue.png \
+  --gfp-threshold 1.0
+```
+
+- **segment** uses phase + fluorescence to build a 3-channel image for Cellpose (SAM backbone). Output `masks.zarr` mirrors `crops.zarr`: `pos/{pos}/crop/{crop_id}` with shape `(T, H, W)` uint32 labels.
+- **analyze** reads fluorescence from crops and labels from masks; writes CSV with `t,crop,cell,total_fluorescence,cell_area,background`. If `pos/{pos}/background` is missing in crops.zarr, background is 0.
+- **plot** treats a cell as GFP+ when `(total_fluorescence / cell_area) - background > --gfp-threshold`, then plots GFP+ count and mean/median of that value over time.
+
+### 9. Detect spots (muapplication spot)
 
 Detect fluorescent spots per crop per timepoint using spotiflow.
 
@@ -445,6 +485,29 @@ sources:
     annotations: /path/to/annotations.csv
 ```
 
+### Expression CSV (muapplication expression analyze → muapplication expression plot)
+
+```csv
+t,crop,intensity,area,background
+0,000,12345,5929,2.1
+0,001,9876,5929,2.1
+1,000,12400,5929,2.0
+```
+
+One row per crop per timepoint. `intensity` is the sum of pixel values in the crop; `area` is the number of pixels (h×w); `background` is the per-pixel background for that frame/channel (from `crops.zarr`). Background-subtracted intensity = `intensity - background * area`.
+
+### Tissue CSV (muapplication tissue analyze → muapplication tissue plot)
+
+```csv
+t,crop,cell,total_fluorescence,cell_area,background
+0,000,1,1234.5,892,2.1
+0,000,2,987.2,756,2.1
+0,001,1,456.7,623,2.1
+1,000,1,1450.2,895,2.0
+```
+
+One row per cell per frame. `cell` is the segmentation label (1, 2, …); `total_fluorescence` is the sum of fluorescence in that cell’s pixels; `cell_area` is the number of pixels in the cell; `background` is per-pixel background for that frame/channel (0 if missing from crops.zarr). GFP+ in plot: `(total_fluorescence / cell_area) - background > --gfp-threshold`.
+
 ### Spot CSV (muapplication spot detect → muapplication spot plot)
 
 ```csv
@@ -504,6 +567,7 @@ uv run muapplication --help
 uv run muapplication file --help
 uv run muapplication kill --help
 uv run muapplication expression --help
+uv run muapplication tissue --help
 uv run muapplication spot --help
 ```
 
@@ -511,5 +575,5 @@ uv run muapplication spot --help
 
 - **mupattern** (web register + see): React 18, TypeScript, Vite, React Router, TanStack Store, Tailwind CSS 4, shadcn/ui, HTML5 Canvas, File System Access API
 - **mustudio** (desktop workspace): Electron, React 18, TypeScript, Vite, React Router, TanStack Store
-- **muapplication**: Python, typer, FastAPI, zarr v2, tifffile, nd2, transformers (HuggingFace), torch, spotiflow, pandas, matplotlib
+- **muapplication**: Python, typer, FastAPI, zarr v2, tifffile, nd2, transformers (HuggingFace), torch, cellpose, spotiflow, pandas, matplotlib
 

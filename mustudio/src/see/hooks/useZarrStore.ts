@@ -84,8 +84,8 @@ export function useZarrStore() {
         if (cancelled) return;
         setStore(ds);
         setIndex(idx);
-        setSelectedPositions([resolvedPosId]);
-        setSelectedPos(resolvedPosId);
+        setSelectedPositions(idx.positions);
+        setSelectedPos(idx.positions[0] ?? resolvedPosId);
         setC(activeWorkspace.selectedChannel);
         setZ(activeWorkspace.selectedZ);
       } catch (e) {

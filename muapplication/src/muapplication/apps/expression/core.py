@@ -27,67 +27,86 @@ def run_analyze(
 
     bg_arr = root[f"pos/{pos:03d}/background"]
 
-    rows: list[tuple[int, str, int, float]] = []
+    rows: list[tuple[int, str, int, int, float]] = []
     total = len(crop_ids)
     for i, crop_id in enumerate(crop_ids):
         arr = crop_grp[crop_id]
         n_times = arr.shape[0]
-        n_pixels = arr.shape[3] * arr.shape[4]  # h * w
+        area = arr.shape[3] * arr.shape[4]  # h * w
 
         for t in range(n_times):
             intensity = int(np.array(arr[t, channel, 0]).sum())
-            bg_per_pixel = float(bg_arr[t, channel, 0])
-            background = bg_per_pixel * n_pixels
-            rows.append((t, crop_id, intensity, background))
+            background = float(bg_arr[t, channel, 0])  # per-pixel
+            rows.append((t, crop_id, intensity, area, background))
 
         if on_progress and total > 0:
             on_progress((i + 1) / total, f"Processing crop {i + 1}/{total}")
 
     output.parent.mkdir(parents=True, exist_ok=True)
     with open(output, "w", newline="") as fh:
-        fh.write("t,crop,intensity,background\n")
-        for t, crop, intensity, background in rows:
-            fh.write(f"{t},{crop},{intensity},{background}\n")
+        fh.write("t,crop,intensity,area,background\n")
+        for t, crop, intensity, area, background in rows:
+            fh.write(f"{t},{crop},{intensity},{area},{background}\n")
 
     if on_progress:
         on_progress(1.0, f"Wrote {len(rows)} rows to {output}")
 
 
-def run_plot(input_csv: Path, output: Path) -> None:
-    """Plot intensity over time for every crop (raw and background-subtracted)."""
+def run_plot(input_csv: Path, output_dir: Path) -> None:
+    """Plot raw intensity and background-corrected total fluor per crop over time. Writes two square plots into output_dir: intensity.png and background_corrected_total_fluor.png (same style as tissue plot)."""
     import matplotlib
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
+    output_dir = output_dir.resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    raw_path = output_dir / "intensity.png"
+    sub_path = output_dir / "background_corrected_total_fluor.png"
+
     df = pd.read_csv(input_csv, dtype={"crop": str})
-    n_crops = df["crop"].nunique()
-    max_t = df["t"].max()
+    df["intensity_above_bg"] = df["intensity"] - df["area"] * df["background"]
+    crops = sorted(df["crop"].unique())
+    size = 6
 
-    fig, (ax_raw, ax_sub) = plt.subplots(
-        1, 2, figsize=(12, 4), sharey=False, gridspec_kw={"wspace": 0.3}
-    )
+    if not crops:
+        fig, ax = plt.subplots(figsize=(size, size))
+        ax.set_ylabel("Intensity")
+        ax.set_title("Raw intensity per crop")
+        ax.set_xlabel("t")
+        plt.tight_layout()
+        plt.savefig(raw_path, dpi=150, bbox_inches="tight")
+        plt.close()
+        fig, ax = plt.subplots(figsize=(size, size))
+        ax.set_ylabel("Background-corrected total fluor")
+        ax.set_title("Background-corrected total fluor per crop")
+        ax.set_xlabel("t")
+        plt.tight_layout()
+        plt.savefig(sub_path, dpi=150, bbox_inches="tight")
+        plt.close()
+        return
 
-    for _crop_id, group in df.groupby("crop"):
-        group = group.sort_values("t")
-        ax_raw.plot(group["t"], group["intensity"], linewidth=0.5, alpha=0.4)
-        ax_sub.plot(
-            group["t"],
-            group["intensity"] - group["background"],
-            linewidth=0.5,
-            alpha=0.4,
-        )
+    cmap = plt.get_cmap("tab10" if len(crops) <= 10 else "tab20")
+    colors = [cmap(i % cmap.N) for i in range(len(crops))]
 
-    ax_raw.set_xlabel("t")
-    ax_raw.set_ylabel("intensity")
-    ax_raw.set_title("Raw intensity")
-    ax_raw.set_xlim(0, max_t)
+    fig, ax = plt.subplots(figsize=(size, size))
+    for i, crop in enumerate(crops):
+        group = df[df["crop"] == crop].sort_values("t")
+        ax.plot(group["t"], group["intensity"], color=colors[i], linestyle="-")
+    ax.set_ylabel("Intensity")
+    ax.set_title("Raw intensity per crop")
+    ax.set_xlabel("t")
+    plt.tight_layout()
+    plt.savefig(raw_path, dpi=150, bbox_inches="tight")
+    plt.close()
 
-    ax_sub.set_xlabel("t")
-    ax_sub.set_ylabel("intensity − background")
-    ax_sub.set_title("Background-subtracted")
-    ax_sub.set_xlim(0, max_t)
-
-    output.parent.mkdir(parents=True, exist_ok=True)
-    plt.savefig(output, dpi=150, bbox_inches="tight")
+    fig, ax = plt.subplots(figsize=(size, size))
+    for i, crop in enumerate(crops):
+        group = df[df["crop"] == crop].sort_values("t")
+        ax.plot(group["t"], group["intensity_above_bg"], color=colors[i], linestyle="-")
+    ax.set_ylabel("Background-corrected total fluor")
+    ax.set_title("Background-corrected total fluor per crop")
+    ax.set_xlabel("t")
+    plt.tight_layout()
+    plt.savefig(sub_path, dpi=150, bbox_inches="tight")
     plt.close()
