@@ -62,6 +62,10 @@ export function useZarrStore() {
 
   /** Phase 1: Open directory and quickly list available positions. */
   const openDirectory = useCallback(async () => {
+    if (typeof window.showDirectoryPicker !== "function") {
+      setError("MuSee requires Chrome or Edge. Safari and Firefox are not supported.");
+      return;
+    }
     try {
       setLoading(true);
       setError(null);

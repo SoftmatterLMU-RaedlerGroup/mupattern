@@ -91,6 +91,11 @@ export default function WorkspaceDashboard() {
     setError(null)
     setLoading(true)
     try {
+      if (typeof window.showDirectoryPicker !== "function") {
+        setError("MuPattern requires Chrome or Edge. Safari and Firefox are not supported.")
+        setLoading(false)
+        return
+      }
       const handle = await window.showDirectoryPicker()
       const result = await scanParentFolder(handle)
       if (!result || result.positions.length === 0) {
