@@ -13,7 +13,7 @@ import {
 } from "@/see/lib/annotations";
 import { type SpotMap, spotKey, uploadSpotCSV } from "@/see/lib/spots";
 import {
-  viewerStore,
+  mupatternStore,
   setAnnotations as persistAnnotations,
   setSpots as persistSpots,
   setSelectedPos as persistSelectedPos,
@@ -45,6 +45,7 @@ import {
 } from "lucide-react";
 import { AppHeader } from "@/components/AppHeader";
 import { LeftSidebar } from "@/see/components/LeftSidebar";
+import { clearAppSession } from "@/lib/clear-session";
 
 const PAGE_SIZE = 9; // 3x3
 
@@ -55,18 +56,18 @@ interface ViewerProps {
 
 export function Viewer({ store, index }: ViewerProps) {
 
-  // Persisted state from store
-  const selectedPos = useStore(viewerStore, (s) => s.selectedPos);
-  const t = useStore(viewerStore, (s) => s.t);
-  const c = useStore(viewerStore, (s) => s.c);
-  const page = useStore(viewerStore, (s) => s.page);
-  const contrastMin = useStore(viewerStore, (s) => s.contrastMin);
-  const contrastMax = useStore(viewerStore, (s) => s.contrastMax);
-  const annotating = useStore(viewerStore, (s) => s.annotating);
-  const annotationEntries = useStore(viewerStore, (s) => s.annotations);
-  const spotEntries = useStore(viewerStore, (s) => s.spots);
-  const showAnnotations = useStore(viewerStore, (s) => s.showAnnotations);
-  const showSpots = useStore(viewerStore, (s) => s.showSpots);
+  // Persisted state from central store
+  const selectedPos = useStore(mupatternStore, (s) => s.see.selectedPos);
+  const t = useStore(mupatternStore, (s) => s.see.t);
+  const c = useStore(mupatternStore, (s) => s.see.c);
+  const page = useStore(mupatternStore, (s) => s.see.page);
+  const contrastMin = useStore(mupatternStore, (s) => s.see.contrastMin);
+  const contrastMax = useStore(mupatternStore, (s) => s.see.contrastMax);
+  const annotating = useStore(mupatternStore, (s) => s.see.annotating);
+  const annotationEntries = useStore(mupatternStore, (s) => s.see.annotations);
+  const spotEntries = useStore(mupatternStore, (s) => s.see.spots);
+  const showAnnotations = useStore(mupatternStore, (s) => s.see.showAnnotations);
+  const showSpots = useStore(mupatternStore, (s) => s.see.showSpots);
 
   // Derive annotations Map from persisted entries
   const annotations: Annotations = useMemo(
@@ -143,7 +144,7 @@ export function Viewer({ store, index }: ViewerProps) {
   useEffect(() => {
     if (playing) {
       playIntervalRef.current = setInterval(() => {
-        const curr = viewerStore.state.t;
+        const curr = mupatternStore.state.see.t;
         persistT(curr >= maxT ? 0 : curr + 1);
       }, 500);
     }
@@ -318,8 +319,14 @@ export function Viewer({ store, index }: ViewerProps) {
   return (
     <div className="flex flex-col h-screen">
       <AppHeader
-        title="MuSee"
+        title="See"
         subtitle="Micropattern crop viewer"
+        backTo="/"
+        backLabel="Home"
+        onBackClick={() => {
+          clearAppSession();
+          window.location.href = "/";
+        }}
       />
 
       {/* Slider row */}

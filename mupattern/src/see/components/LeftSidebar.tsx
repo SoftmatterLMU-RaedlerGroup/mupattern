@@ -1,6 +1,5 @@
 import { Button } from "@/components/ui/button"
-import { ChevronLeft, ChevronRight, Home } from "lucide-react"
-import { clearAppSession } from "@/lib/clear-session"
+import { ChevronLeft, ChevronRight } from "lucide-react"
 
 interface LeftSidebarProps {
   positions: string[]
@@ -19,11 +18,6 @@ export function LeftSidebar({
   channel,
   onChannelChange,
 }: LeftSidebarProps) {
-  const handleHome = () => {
-    clearAppSession()
-    window.location.href = "/"
-  }
-
   const handleChannelStep = (delta: -1 | 1) => {
     const next = Math.max(0, Math.min(numChannels - 1, channel + delta))
     if (next !== channel) onChannelChange(next)
@@ -41,20 +35,9 @@ export function LeftSidebar({
 
   return (
     <aside className="w-64 flex-shrink-0 overflow-y-auto border-r border-border p-4 space-y-4">
-      <Button
-        variant="outline"
-        size="sm"
-        className="w-full justify-start"
-        onClick={handleHome}
-        title="Back to home (clears session)"
-      >
-        <Home className="size-4" />
-        Home
-      </Button>
-
       <div>
         <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-          Viewer slice
+          Viewer Slice
         </h2>
         <p className="text-xs text-muted-foreground mt-1">
           Choose position and channel.

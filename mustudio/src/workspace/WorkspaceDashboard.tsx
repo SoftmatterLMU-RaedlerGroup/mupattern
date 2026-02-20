@@ -290,7 +290,7 @@ export default function WorkspaceDashboard() {
                 <span className="text-center">
                   load in
                   <br />
-                  musee
+                  See
                 </span>
               </Button>
               <Button
@@ -305,7 +305,7 @@ export default function WorkspaceDashboard() {
                     <>
                       load in
                       <br />
-                      muregister
+                      Register
                     </>
                   )}
                 </span>

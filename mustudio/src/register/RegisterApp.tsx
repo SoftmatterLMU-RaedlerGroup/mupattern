@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState, useEffect } from "react"
 import { useStore } from "@tanstack/react-store"
-import { Header } from "@/register/components/Header"
+import { AppHeader } from "@/components/AppHeader"
 import { LeftSliceSidebar } from "@/register/components/LeftSliceSidebar"
 import { Sidebar } from "@/register/components/Sidebar"
 import { UnifiedCanvas } from "@/register/components/UnifiedCanvas"
@@ -135,7 +135,11 @@ export default function RegisterApp() {
 
   return (
     <div className="flex h-screen flex-col">
-      <Header />
+      <AppHeader
+        title="Register"
+        subtitle="Microscopy pattern-to-image registration"
+        backTo="/workspace"
+      />
       {workspaceImageError && (
         <div className="px-4 py-2 text-sm text-destructive border-b border-border bg-destructive/5">
           {workspaceImageError}

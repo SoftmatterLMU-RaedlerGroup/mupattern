@@ -1,7 +1,5 @@
-const SESSION_KEYS = ["mupattern-register-app", "mupattern-see-viewer"]
+const SESSION_KEY = "mupattern-session"
 
 export function clearAppSession(): void {
-  for (const key of SESSION_KEYS) {
-    sessionStorage.removeItem(key)
-  }
+  sessionStorage.removeItem(SESSION_KEY)
 }
