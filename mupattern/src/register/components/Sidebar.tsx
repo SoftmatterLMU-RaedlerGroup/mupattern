@@ -1,7 +1,5 @@
-import { useCallback, useRef, useState } from "react"
+import { useCallback, useRef } from "react"
 import { ChevronsUpDown } from "lucide-react"
-import { loadImageFile, imageToDataURL } from "@/lib/load-image"
-import { startWithImage } from "@/register/store"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Separator } from "@/components/ui/separator"
 import { Button } from "@/components/ui/button"
@@ -69,20 +67,6 @@ export function Sidebar({
   onPatternOpacityChange,
 }: SidebarProps) {
   const configInputRef = useRef<HTMLInputElement>(null)
-  const imageInputRef = useRef<HTMLInputElement>(null)
-  const [imageLoading, setImageLoading] = useState(false)
-
-  const handleImageFile = useCallback(async (file: File) => {
-    setImageLoading(true)
-    try {
-      const { image, filename } = await loadImageFile(file)
-      startWithImage(imageToDataURL(image), filename, image.width, image.height)
-    } catch {
-      // silently fail
-    } finally {
-      setImageLoading(false)
-    }
-  }, [])
 
   const handleConfigFile = useCallback((file: File) => {
     const reader = new FileReader()
@@ -104,28 +88,12 @@ export function Sidebar({
       <Section title="Config">
         <div className="space-y-1.5">
           <input
-            ref={imageInputRef}
-            type="file"
-            accept="image/png,image/tiff,.tif,.tiff"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) { void handleImageFile(f); e.target.value = "" } }}
-            className="hidden"
-          />
-          <input
             ref={configInputRef}
             type="file"
             accept=".yaml,.yml"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) handleConfigFile(f); e.target.value = "" }}
             className="hidden"
           />
-          <Button
-            variant="secondary"
-            size="sm"
-            className="w-full h-7 text-base"
-            onClick={() => imageInputRef.current?.click()}
-            disabled={imageLoading}
-          >
-            {imageLoading ? "Loading..." : "Load image"}
-          </Button>
           <Button variant="secondary" size="sm" className="w-full h-7 text-base" onClick={() => configInputRef.current?.click()}>
             Load config
           </Button>
