@@ -11,14 +11,13 @@ import {
 
 export interface AppState {
   started: boolean
-  /** Data URL of the loaded image, or null if "start fresh" */
+  /** Data URL of the loaded image */
   imageDataURL: string | null
   imageBaseName: string
   canvasSize: { width: number; height: number }
   pattern: PatternConfigUm
   transform: Transform
   calibration: Calibration
-  sensitivity: number
   detectedPoints: Array<{ x: number; y: number }> | null
 }
 
@@ -30,7 +29,6 @@ const defaultState: AppState = {
   pattern: DEFAULT_PATTERN_UM,
   transform: DEFAULT_TRANSFORM,
   calibration: DEFAULT_CALIBRATION,
-  sensitivity: 0.5,
   detectedPoints: null,
 }
 
@@ -46,16 +44,6 @@ export function startWithImage(imageDataURL: string, filename: string, width: nu
     started: true,
     imageDataURL,
     imageBaseName: filename,
-    canvasSize: { width, height },
-  }))
-}
-
-export function startFresh(width: number, height: number) {
-  appStore.setState((s) => ({
-    ...s,
-    started: true,
-    imageDataURL: null,
-    imageBaseName: "pattern",
     canvasSize: { width, height },
   }))
 }
@@ -135,10 +123,6 @@ export function setCalibration(cal: Calibration) {
   if (cal.umPerPixel > 0) {
     appStore.setState((s) => ({ ...s, calibration: cal }))
   }
-}
-
-export function setSensitivity(sensitivity: number) {
-  appStore.setState((s) => ({ ...s, sensitivity }))
 }
 
 export function resetPatternAndTransform() {

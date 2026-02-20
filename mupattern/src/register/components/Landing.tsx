@@ -1,9 +1,7 @@
 import { useState, useCallback, useRef } from "react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { HexBackground } from "@/components/HexBackground"
-import { ImageIcon, Ruler } from "lucide-react"
+import { ImageIcon } from "lucide-react"
 import * as UTIF from "utif2"
 import { ThemeToggle } from "@/components/ThemeToggle"
 import { useTheme } from "@/components/ThemeProvider"
@@ -19,19 +17,11 @@ function stripExtension(filename: string): string {
   return filename.replace(/\.[^.]+$/, "")
 }
 
-export interface StartWithImage {
+export interface StartConfig {
   kind: "image"
   image: HTMLImageElement
   filename: string
 }
-
-export interface StartFresh {
-  kind: "fresh"
-  width: number
-  height: number
-}
-
-export type StartConfig = StartWithImage | StartFresh
 
 interface LandingProps {
   onStart: (config: StartConfig) => void
@@ -42,8 +32,6 @@ export function Landing({ onStart }: LandingProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [width, setWidth] = useState(2048)
-  const [height, setHeight] = useState(2048)
 
   const handleImageReady = useCallback(
     (img: HTMLImageElement, filename: string) => {
@@ -134,17 +122,11 @@ export function Landing({ onStart }: LandingProps) {
     [loadImage]
   )
 
-  const handleStartFresh = useCallback(() => {
-    const w = Math.max(64, Math.min(8192, width))
-    const h = Math.max(64, Math.min(8192, height))
-    onStart({ kind: "fresh", width: w, height: h })
-  }, [width, height, onStart])
-
   return (
-    <div className="flex flex-col items-center justify-center h-screen gap-8">
+    <div className="relative flex flex-col items-center justify-center h-screen gap-8 p-6">
       <HexBackground theme={theme} />
 
-      <div className="absolute top-4 right-4">
+      <div className="absolute top-4 right-4 z-10">
         <ThemeToggle />
       </div>
 
@@ -155,76 +137,32 @@ export function Landing({ onStart }: LandingProps) {
         >
           MuRegister
         </h1>
-        <p className="text-muted-foreground mt-1">
+        <p className="text-muted-foreground mt-1 text-center max-w-md">
           Microscopy pattern-to-image registration
         </p>
       </div>
 
-      <div className="flex gap-6 max-w-2xl w-full px-6">
-        {/* Option 1: Load image */}
-        <div className="flex-1 border rounded-lg p-8 backdrop-blur-sm bg-background/80">
-          <input
-            ref={inputRef}
-            type="file"
-            accept="image/png,image/tiff,.tif,.tiff"
-            onChange={handleChange}
-            className="hidden"
-          />
-          <div className="flex flex-col items-center gap-4">
-            <ImageIcon className="size-8 text-muted-foreground" />
+      <div className="border rounded-lg p-8 backdrop-blur-sm bg-background/80 max-w-md w-full">
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/png,image/tiff,.tif,.tiff"
+          onChange={handleChange}
+          className="hidden"
+        />
+        <div className="flex flex-col items-center gap-4 text-center">
+          <div className="flex items-center justify-center gap-4">
+            <ImageIcon className="size-12 text-muted-foreground flex-shrink-0" />
             <p className="font-medium">
               {loading ? "Loading..." : "Load image"}
             </p>
-            <p className="text-sm text-muted-foreground text-center">
-              Open a PNG or TIFF microscopy image.
-            </p>
-            <Button onClick={() => inputRef.current?.click()} disabled={loading} className="w-full">
-              Choose file
-            </Button>
           </div>
-        </div>
-
-        {/* Divider */}
-        <div className="flex flex-col items-center justify-center gap-2">
-          <div className="h-full w-px bg-border" />
-          <span className="text-sm text-muted-foreground">or</span>
-          <div className="h-full w-px bg-border" />
-        </div>
-
-        {/* Option 2: Start fresh */}
-        <div className="flex-1 border rounded-lg p-8 backdrop-blur-sm bg-background/80">
-          <div className="flex flex-col items-center gap-4">
-            <Ruler className="size-8 text-muted-foreground" />
-            <p className="font-medium">Start fresh</p>
-            <p className="text-sm text-muted-foreground text-center">
-              Set canvas dimensions and work without an image.
-            </p>
-            <div className="grid grid-cols-2 gap-3 w-full">
-              <div className="space-y-1">
-                <Label className="text-xs">Width (px)</Label>
-                <Input
-                  type="number"
-                  min={64}
-                  max={8192}
-                  value={width}
-                  onChange={(e) => setWidth(Number(e.target.value))}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Height (px)</Label>
-                <Input
-                  type="number"
-                  min={64}
-                  max={8192}
-                  value={height}
-                  onChange={(e) => setHeight(Number(e.target.value))}
-                />
-              </div>
-            </div>
-            <Button onClick={handleStartFresh} className="w-full">
-              Create canvas
-            </Button>
-          </div>
+          <p className="text-sm text-muted-foreground">
+            Open a PNG or TIFF microscopy image.
+          </p>
+          <Button onClick={() => inputRef.current?.click()} disabled={loading}>
+            Choose file
+          </Button>
         </div>
       </div>
 

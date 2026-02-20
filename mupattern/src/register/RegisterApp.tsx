@@ -1,6 +1,7 @@
 import { useCallback, useRef, useMemo, useState, useEffect } from "react"
 import { useStore } from "@tanstack/react-store"
-import { Header } from "@/register/components/Header"
+import { AppHeader } from "@/components/AppHeader"
+import { LeftNav } from "@/register/components/LeftNav"
 import { Sidebar } from "@/register/components/Sidebar"
 import { UnifiedCanvas, type UnifiedCanvasRef } from "@/register/components/UnifiedCanvas"
 import { Landing, type StartConfig } from "@/register/components/Landing"
@@ -8,8 +9,6 @@ import { patternToPixels, patternToYAML } from "@/register/lib/units"
 import {
   appStore,
   startWithImage,
-  startFresh,
-  loadImage,
   setPattern,
   updateLattice,
   updateWidth,
@@ -18,7 +17,6 @@ import {
   rotatePattern,
   updateTransform,
   setCalibration,
-  setSensitivity,
   resetPatternAndTransform,
   setDetectedPoints,
   clearDetectedPoints,
@@ -87,7 +85,6 @@ export default function RegisterApp() {
   const pattern = useStore(appStore, (s) => s.pattern)
   const transform = useStore(appStore, (s) => s.transform)
   const calibration = useStore(appStore, (s) => s.calibration)
-  const sensitivity = useStore(appStore, (s) => s.sensitivity)
   const detectedPoints = useStore(appStore, (s) => s.detectedPoints)
 
   const phaseContrast = useImageFromDataURL(imageDataURL)
@@ -99,18 +96,8 @@ export default function RegisterApp() {
   )
 
   const handleStart = useCallback((config: StartConfig) => {
-    if (config.kind === "image") {
-      const dataURL = imageToDataURL(config.image)
-      startWithImage(dataURL, config.filename, config.image.width, config.image.height)
-    } else {
-      startFresh(config.width, config.height)
-    }
-  }, [])
-
-  const handleImageLoad = useCallback((img: HTMLImageElement, filename: string) => {
-    const dataURL = imageToDataURL(img)
-    loadImage(dataURL, filename, img.width, img.height)
-    clearDetectedPoints()
+    const dataURL = imageToDataURL(config.image)
+    startWithImage(dataURL, config.filename, config.image.width, config.image.height)
   }, [])
 
   const handleExportYAML = useCallback(() => {
@@ -163,8 +150,12 @@ export default function RegisterApp() {
 
   return (
     <div className="flex h-screen flex-col">
-      <Header />
+      <AppHeader
+        title="MuRegister"
+        subtitle="Microscopy pattern-to-image registration"
+      />
       <div className="flex flex-1 min-h-0">
+        <LeftNav />
         <UnifiedCanvas
           ref={canvasRef}
           displayImage={normalizedPhaseContrast}
@@ -175,13 +166,10 @@ export default function RegisterApp() {
           onTransformUpdate={updateTransform}
           onZoom={scalePattern}
           onRotate={rotatePattern}
-          sensitivity={sensitivity}
           onExportYAML={handleExportYAML}
           detectedPoints={detectedPoints}
         />
         <Sidebar
-          imageBaseName={phaseContrast ? imageBaseName : null}
-          onImageLoad={handleImageLoad}
           onConfigLoad={setPattern}
           onCalibrationLoad={setCalibration}
           calibration={calibration}
@@ -192,8 +180,6 @@ export default function RegisterApp() {
           onHeightUpdate={updateHeight}
           transform={transform}
           onTransformUpdate={updateTransform}
-          sensitivity={sensitivity}
-          onSensitivityChange={setSensitivity}
           onReset={handleReset}
           onExport={handleExport}
           hasImage={!!phaseContrast}

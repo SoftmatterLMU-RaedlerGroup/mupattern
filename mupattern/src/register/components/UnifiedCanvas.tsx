@@ -12,7 +12,6 @@ interface UnifiedCanvasProps {
   onTransformUpdate: (updates: Partial<Transform>) => void
   onZoom: (factor: number) => void
   onRotate: (deltaRad: number) => void
-  sensitivity: number
   onExportYAML?: () => void
   detectedPoints?: Array<{ x: number; y: number }> | null
 }
@@ -24,7 +23,7 @@ export interface UnifiedCanvasRef {
 }
 
 export const UnifiedCanvas = forwardRef<UnifiedCanvasRef, UnifiedCanvasProps>(
-  function UnifiedCanvas({ displayImage, canvasSize, imageBaseName, patternPx, transform, onTransformUpdate, onZoom, onRotate, sensitivity, onExportYAML, detectedPoints }, ref) {
+  function UnifiedCanvas({ displayImage, canvasSize, imageBaseName, patternPx, transform, onTransformUpdate, onZoom, onRotate, onExportYAML, detectedPoints }, ref) {
     const { theme } = useTheme()
     const canvasRef = useRef<HTMLCanvasElement>(null)
     type DragMode = "none" | "pan" | "rotate" | "resize"
@@ -365,15 +364,12 @@ export const UnifiedCanvas = forwardRef<UnifiedCanvasRef, UnifiedCanvasProps>(
       const dy = e.clientY - lastPos.current.y
       lastPos.current = { x: e.clientX, y: e.clientY }
 
-      // sensitivity 0–1 maps to 0.1x–10x multiplier (logarithmic)
-      const s = Math.pow(10, (sensitivity - 0.5) * 2)
-
       switch (dragMode.current) {
         case "rotate":
-          onRotate(dx * 0.003 * s)
+          onRotate(dx * 0.003)
           break
         case "resize":
-          onZoom(1 + dx * 0.002 * s)
+          onZoom(1 + dx * 0.002)
           break
         case "pan":
           onTransformUpdate({
@@ -382,7 +378,7 @@ export const UnifiedCanvas = forwardRef<UnifiedCanvasRef, UnifiedCanvasProps>(
           })
           break
       }
-    }, [transform, onTransformUpdate, onRotate, onZoom, sensitivity])
+    }, [transform, onTransformUpdate, onRotate, onZoom])
 
     const handleMouseUp = useCallback(() => {
       dragMode.current = "none"

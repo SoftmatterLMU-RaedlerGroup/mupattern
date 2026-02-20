@@ -5,7 +5,7 @@ import { useTheme } from "@/components/ThemeProvider"
 import { Microscope, Eye } from "lucide-react"
 import { Link } from "react-router-dom"
 
-export default function WorkspaceLanding() {
+export default function Landing() {
   const { theme } = useTheme()
 
   return (

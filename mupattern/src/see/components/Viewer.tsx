@@ -27,7 +27,6 @@ import {
 } from "@/see/store";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 import {
   ChevronLeft,
   ChevronRight,
@@ -37,8 +36,6 @@ import {
   Pause,
   SkipBack,
   SkipForward,
-  Sun,
-  Moon,
   Download,
   Upload,
   Pencil,
@@ -46,7 +43,8 @@ import {
   EyeOff,
   Crosshair,
 } from "lucide-react";
-import { useTheme } from "@/components/ThemeProvider";
+import { AppHeader } from "@/components/AppHeader";
+import { LeftSidebar } from "@/see/components/LeftSidebar";
 
 const PAGE_SIZE = 9; // 3x3
 
@@ -56,7 +54,6 @@ interface ViewerProps {
 }
 
 export function Viewer({ store, index }: ViewerProps) {
-  const { theme, toggleTheme } = useTheme();
 
   // Persisted state from store
   const selectedPos = useStore(viewerStore, (s) => s.selectedPos);
@@ -320,59 +317,10 @@ export function Viewer({ store, index }: ViewerProps) {
 
   return (
     <div className="flex flex-col h-screen">
-      {/* Header */}
-      <header className="flex items-center justify-between px-4 py-3 border-b border-border">
-        <div>
-          <h1
-            className="text-4xl tracking-tight"
-            style={{ fontFamily: '"Bitcount", monospace' }}
-          >
-            MuSee
-          </h1>
-          <p className="text-base text-muted-foreground">
-            Micropattern crop viewer
-          </p>
-        </div>
-        <div className="flex items-center gap-6">
-          {index.positions.length > 1 && (
-            <select
-              value={validPos}
-              onChange={(e) => handleChangePos(e.target.value)}
-              className="bg-secondary text-secondary-foreground rounded px-2 py-1 text-sm"
-            >
-              {index.positions.map((p) => (
-                <option key={p} value={p}>
-                  Pos {p}
-                </option>
-              ))}
-            </select>
-          )}
-          <select
-            value={c}
-            onChange={(e) => handleChangeChannel(Number(e.target.value))}
-            className="bg-secondary text-secondary-foreground rounded px-2 py-1 text-sm"
-          >
-            {Array.from({ length: numChannels }, (_, i) => (
-              <option key={i} value={i}>
-                Ch {i}
-              </option>
-            ))}
-          </select>
-          <span className="text-sm text-muted-foreground">
-            {crops.length} crops
-          </span>
-          <div className="mx-1 h-4 w-px bg-border" />
-          <div className="flex items-center gap-2">
-            <Sun className="size-3.5 text-muted-foreground" />
-            <Switch
-              checked={theme === "dark"}
-              onCheckedChange={toggleTheme}
-              aria-label="Toggle dark mode"
-            />
-            <Moon className="size-3.5 text-muted-foreground" />
-          </div>
-        </div>
-      </header>
+      <AppHeader
+        title="MuSee"
+        subtitle="Micropattern crop viewer"
+      />
 
       {/* Slider row */}
       <div className="px-4 py-1 border-b">
@@ -438,8 +386,16 @@ export function Viewer({ store, index }: ViewerProps) {
         </div>
       </div>
 
-      {/* Main area: crop grid + right sidebar */}
+      {/* Main area: left sidebar + crop grid + right sidebar */}
       <div className="flex flex-1 overflow-hidden">
+        <LeftSidebar
+          positions={index.positions}
+          validPos={validPos}
+          onPositionChange={handleChangePos}
+          numChannels={numChannels}
+          channel={c}
+          onChannelChange={handleChangeChannel}
+        />
         {/* Crop grid */}
         <div className="flex-1 overflow-hidden p-4">
           <div className="grid grid-cols-3 grid-rows-3 gap-2 h-full">
@@ -537,22 +493,27 @@ export function Viewer({ store, index }: ViewerProps) {
       </div>
 
       {/* Pagination */}
-      <div className="flex items-center justify-center gap-2 px-4 py-2 border-t">
-        <Button variant="ghost" size="icon-xs" disabled={clampedPage === 0} onClick={() => setPage(0)}>
-          <SkipBack className="size-3" />
-        </Button>
-        <Button variant="ghost" size="icon-xs" disabled={clampedPage === 0} onClick={() => setPage(clampedPage - 1)}>
-          <ChevronLeft className="size-3" />
-        </Button>
-        <span className="text-sm tabular-nums">
-          Page {clampedPage + 1} / {totalPages}
+      <div className="flex items-center justify-center gap-4 px-4 py-2 border-t">
+        <span className="text-sm text-muted-foreground">
+          {crops.length} crops
         </span>
-        <Button variant="ghost" size="icon-xs" disabled={clampedPage >= totalPages - 1} onClick={() => setPage(clampedPage + 1)}>
-          <ChevronRight className="size-3" />
-        </Button>
-        <Button variant="ghost" size="icon-xs" disabled={clampedPage >= totalPages - 1} onClick={() => setPage(totalPages - 1)}>
-          <SkipForward className="size-3" />
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon-xs" disabled={clampedPage === 0} onClick={() => setPage(0)}>
+            <SkipBack className="size-3" />
+          </Button>
+          <Button variant="ghost" size="icon-xs" disabled={clampedPage === 0} onClick={() => setPage(clampedPage - 1)}>
+            <ChevronLeft className="size-3" />
+          </Button>
+          <span className="text-sm tabular-nums">
+            Page {clampedPage + 1} / {totalPages}
+          </span>
+          <Button variant="ghost" size="icon-xs" disabled={clampedPage >= totalPages - 1} onClick={() => setPage(clampedPage + 1)}>
+            <ChevronRight className="size-3" />
+          </Button>
+          <Button variant="ghost" size="icon-xs" disabled={clampedPage >= totalPages - 1} onClick={() => setPage(totalPages - 1)}>
+            <SkipForward className="size-3" />
+          </Button>
+        </div>
       </div>
     </div>
   );
