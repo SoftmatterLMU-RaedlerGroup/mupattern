@@ -116,7 +116,7 @@ export function LeftSidebar({
             >
               {Array.from({ length: numChannels }, (_, i) => (
                 <option key={i} value={i}>
-                  Ch {i}
+                  {i}
                 </option>
               ))}
             </select>
