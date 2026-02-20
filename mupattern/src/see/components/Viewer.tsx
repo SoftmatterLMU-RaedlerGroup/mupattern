@@ -45,7 +45,6 @@ import {
 } from "lucide-react";
 import { AppHeader } from "@/components/AppHeader";
 import { LeftSidebar } from "@/see/components/LeftSidebar";
-import { clearAppSession } from "@/lib/clear-session";
 
 const PAGE_SIZE = 9; // 3x3
 
@@ -323,10 +322,6 @@ export function Viewer({ store, index }: ViewerProps) {
         subtitle="Micropattern crop viewer"
         backTo="/"
         backLabel="Home"
-        onBackClick={() => {
-          clearAppSession();
-          window.location.href = "/";
-        }}
       />
 
       {/* Slider row */}

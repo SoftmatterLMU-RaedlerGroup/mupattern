@@ -14,6 +14,7 @@ export {
   rotatePattern,
   updateTransform,
   setCalibration,
+  setPatternOpacity,
   resetPatternAndTransform,
   setDetectedPoints,
   clearDetectedPoints,

@@ -1,18 +1,16 @@
-import { useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { useZarrStore } from "@/see/hooks/useZarrStore";
-import { Viewer } from "@/see/components/Viewer";
-import { PositionPickerScreen } from "@/see/components/PositionPickerScreen";
+import { useEffect } from "react"
+import { Navigate } from "react-router-dom"
+import { useZarrStore } from "@/see/hooks/useZarrStore"
+import { Viewer } from "@/see/components/Viewer"
+import { PositionPickerScreen } from "@/see/components/PositionPickerScreen"
 
 export default function SeeApp() {
-  const navigate = useNavigate();
-
   useEffect(() => {
-    document.title = "See - MuPattern";
+    document.title = "See - MuPattern"
     return () => {
-      document.title = "MuPattern";
-    };
-  }, []);
+      document.title = "MuPattern"
+    }
+  }, [])
 
   const {
     store,
@@ -21,11 +19,11 @@ export default function SeeApp() {
     loading,
     error,
     loadPositions,
-  } = useZarrStore();
+  } = useZarrStore()
 
   // State 3: Viewer — positions loaded, show the viewer
   if (store && index) {
-    return <Viewer store={store} index={index} />;
+    return <Viewer store={store} index={index} />
   }
 
   // State 2: Position picker — directory opened, positions discovered, awaiting selection
@@ -37,15 +35,9 @@ export default function SeeApp() {
         error={error}
         onConfirm={loadPositions}
       />
-    );
+    )
   }
 
-  // No data: redirect to root
-  useEffect(() => {
-    if (!loading) {
-      navigate("/", { replace: true });
-    }
-  }, [loading, navigate]);
-
-  return null;
+  // No session (reload) — back to landing
+  return <Navigate to="/" replace />
 }

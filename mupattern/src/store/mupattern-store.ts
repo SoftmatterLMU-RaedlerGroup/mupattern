@@ -1,10 +1,10 @@
 /**
- * Central mupattern session store.
- * Persists to sessionStorage (survives reload, lost on tab close).
- * Only theme persists across tab close (handled by ThemeProvider).
+ * Central mupattern store. In-memory only; no sessionStorage.
+ * Theme persists in localStorage (ThemeProvider).
+ * Demo webapp: reload brings user back to landing.
  */
 
-import { createPersistedStore } from "@/register/lib/persist"
+import { Store } from "@tanstack/store"
 import {
   DEFAULT_PATTERN_UM,
   DEFAULT_TRANSFORM,
@@ -25,6 +25,7 @@ export interface RegisterState {
   pattern: PatternConfigUm
   transform: Transform
   calibration: Calibration
+  patternOpacity: number
   detectedPoints: Array<{ x: number; y: number }> | null
 }
 
@@ -36,6 +37,7 @@ const defaultRegister: RegisterState = {
   pattern: DEFAULT_PATTERN_UM,
   transform: DEFAULT_TRANSFORM,
   calibration: DEFAULT_CALIBRATION,
+  patternOpacity: 0.5,
   detectedPoints: null,
 }
 
@@ -83,41 +85,7 @@ const defaultState: MupatternState = {
   see: defaultSee,
 }
 
-export const mupatternStore = createPersistedStore<MupatternState>(
-  "mupattern-session",
-  defaultState,
-  {
-    debounceMs: 500,
-    deserialize: (raw) => ({
-      ...defaultState,
-      ...(raw as Partial<MupatternState>),
-      register: {
-        ...defaultRegister,
-        ...((raw as Partial<MupatternState>)?.register ?? {}),
-        pattern: {
-          ...defaultRegister.pattern,
-          ...((raw as Partial<MupatternState>)?.register?.pattern ?? {}),
-          lattice: {
-            ...defaultRegister.pattern.lattice,
-            ...((raw as Partial<MupatternState>)?.register?.pattern?.lattice ?? {}),
-          },
-        },
-        transform: {
-          ...defaultRegister.transform,
-          ...((raw as Partial<MupatternState>)?.register?.transform ?? {}),
-        },
-        calibration: {
-          ...defaultRegister.calibration,
-          ...((raw as Partial<MupatternState>)?.register?.calibration ?? {}),
-        },
-      },
-      see: {
-        ...defaultSee,
-        ...((raw as Partial<MupatternState>)?.see ?? {}),
-      },
-    }),
-  }
-)
+export const mupatternStore = new Store<MupatternState>(defaultState)
 
 // --- Register actions ---
 
@@ -232,6 +200,13 @@ export function setCalibration(cal: Calibration) {
       register: { ...s.register, calibration: cal },
     }))
   }
+}
+
+export function setPatternOpacity(patternOpacity: number) {
+  mupatternStore.setState((s) => ({
+    ...s,
+    register: { ...s.register, patternOpacity: Math.max(0, Math.min(1, patternOpacity)) },
+  }))
 }
 
 export function resetPatternAndTransform() {

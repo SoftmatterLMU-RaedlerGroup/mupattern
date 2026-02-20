@@ -1,17 +1,21 @@
-import { useCallback, useRef } from "react"
-import { ChevronsUpDown, FileText } from "lucide-react"
+import { useCallback, useRef, useState } from "react"
+import { ChevronsUpDown } from "lucide-react"
+import { loadImageFile, imageToDataURL } from "@/lib/load-image"
+import { startWithImage } from "@/register/store"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Separator } from "@/components/ui/separator"
 import { Button } from "@/components/ui/button"
 import { CalibrationControls } from "@/register/components/CalibrationControls"
 import { PatternEditor } from "@/register/components/PatternEditor"
 import { TransformEditor } from "@/register/components/TransformEditor"
-import { ExportButton } from "@/register/components/ExportButton"
+import { Slider } from "@/components/ui/slider"
+import { Label } from "@/components/ui/label"
 import { parseYAMLConfig } from "@/register/lib/units"
 import type { Calibration, Lattice, PatternConfigUm, Transform } from "@/register/types"
 
 interface SidebarProps {
   onConfigLoad: (config: PatternConfigUm) => void
+  onConfigSave?: () => void
   onCalibrationLoad: (cal: Calibration) => void
   calibration: Calibration
   onCalibrationChange: (cal: Calibration) => void
@@ -21,12 +25,8 @@ interface SidebarProps {
   onHeightUpdate: (height: number) => void
   transform: Transform
   onTransformUpdate: (updates: Partial<Transform>) => void
-  onReset: () => void
-  onExport: () => void
-  hasImage: boolean
-  hasDetectedPoints: boolean
-  onDetect: () => void
-  onFitGrid: (basisAngle: number) => void
+  patternOpacity: number
+  onPatternOpacityChange: (v: number) => void
 }
 
 function Section({
@@ -55,6 +55,7 @@ function Section({
 
 export function Sidebar({
   onConfigLoad,
+  onConfigSave,
   onCalibrationLoad,
   calibration,
   onCalibrationChange,
@@ -64,14 +65,24 @@ export function Sidebar({
   onHeightUpdate,
   transform,
   onTransformUpdate,
-  onReset,
-  onExport,
-  hasImage,
-  hasDetectedPoints,
-  onDetect,
-  onFitGrid,
+  patternOpacity,
+  onPatternOpacityChange,
 }: SidebarProps) {
   const configInputRef = useRef<HTMLInputElement>(null)
+  const imageInputRef = useRef<HTMLInputElement>(null)
+  const [imageLoading, setImageLoading] = useState(false)
+
+  const handleImageFile = useCallback(async (file: File) => {
+    setImageLoading(true)
+    try {
+      const { image, filename } = await loadImageFile(file)
+      startWithImage(imageToDataURL(image), filename, image.width, image.height)
+    } catch {
+      // silently fail
+    } finally {
+      setImageLoading(false)
+    }
+  }, [])
 
   const handleConfigFile = useCallback((file: File) => {
     const reader = new FileReader()
@@ -90,8 +101,15 @@ export function Sidebar({
 
   return (
     <aside className="w-80 flex-shrink-0 overflow-y-auto border-l border-border p-4 space-y-1">
-      <Section title="Files">
+      <Section title="Config">
         <div className="space-y-1.5">
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/png,image/tiff,.tif,.tiff"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) { void handleImageFile(f); e.target.value = "" } }}
+            className="hidden"
+          />
           <input
             ref={configInputRef}
             type="file"
@@ -99,10 +117,23 @@ export function Sidebar({
             onChange={(e) => { const f = e.target.files?.[0]; if (f) handleConfigFile(f); e.target.value = "" }}
             className="hidden"
           />
+          <Button
+            variant="secondary"
+            size="sm"
+            className="w-full h-7 text-base"
+            onClick={() => imageInputRef.current?.click()}
+            disabled={imageLoading}
+          >
+            {imageLoading ? "Loading..." : "Load image"}
+          </Button>
           <Button variant="secondary" size="sm" className="w-full h-7 text-base" onClick={() => configInputRef.current?.click()}>
-            <FileText className="size-3.5" />
             Load config
           </Button>
+          {onConfigSave && (
+            <Button variant="secondary" size="sm" className="w-full h-7 text-base" onClick={onConfigSave}>
+              Save config
+            </Button>
+          )}
         </div>
       </Section>
 
@@ -118,6 +149,21 @@ export function Sidebar({
       <Separator />
 
       <Section title="Pattern">
+        <div className="space-y-1.5 mb-3">
+          <div className="flex items-center justify-between">
+            <Label className="text-base">Pattern opacity</Label>
+            <span className="text-base text-muted-foreground">
+              {Math.round(patternOpacity * 100)}%
+            </span>
+          </div>
+          <Slider
+            min={0}
+            max={1}
+            step={0.01}
+            value={[patternOpacity]}
+            onValueChange={([v]) => onPatternOpacityChange(v)}
+          />
+        </div>
         <PatternEditor
           pattern={pattern}
           onLatticeUpdate={onLatticeUpdate}
@@ -134,45 +180,6 @@ export function Sidebar({
           onUpdate={onTransformUpdate}
         />
       </Section>
-
-      <Separator />
-
-      <div className="space-y-2 pt-2">
-        <Button
-          variant="secondary"
-          size="sm"
-          className="w-full h-7 text-base"
-          disabled={!hasImage}
-          onClick={onDetect}
-        >
-          Detect cells
-        </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          className="w-full h-7 text-base"
-          disabled={!hasDetectedPoints}
-          onClick={() => onFitGrid(Math.PI / 2)}
-        >
-          Auto square (a=b)
-        </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          className="w-full h-7 text-base"
-          disabled={!hasDetectedPoints}
-          onClick={() => onFitGrid(Math.PI / 3)}
-        >
-          Auto hex (a=b)
-        </Button>
-        <div className="flex gap-1.5">
-          <Button variant="secondary" size="sm" className="flex-1 h-7 text-base" onClick={onReset}>
-            Reset
-          </Button>
-          <ExportButton onExport={onExport} />
-        </div>
-      </div>
-
     </aside>
   )
 }

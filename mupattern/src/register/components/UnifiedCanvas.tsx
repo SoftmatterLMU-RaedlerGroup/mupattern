@@ -13,6 +13,7 @@ interface UnifiedCanvasProps {
   onZoom: (factor: number) => void
   onRotate: (deltaRad: number) => void
   onExportYAML?: () => void
+  patternOpacity: number
   detectedPoints?: Array<{ x: number; y: number }> | null
 }
 
@@ -23,7 +24,7 @@ export interface UnifiedCanvasRef {
 }
 
 export const UnifiedCanvas = forwardRef<UnifiedCanvasRef, UnifiedCanvasProps>(
-  function UnifiedCanvas({ displayImage, canvasSize, imageBaseName, patternPx, transform, onTransformUpdate, onZoom, onRotate, onExportYAML, detectedPoints }, ref) {
+  function UnifiedCanvas({ displayImage, canvasSize, imageBaseName, patternPx, transform, onTransformUpdate, onZoom, onRotate, onExportYAML, patternOpacity, detectedPoints }, ref) {
     const { theme } = useTheme()
     const canvasRef = useRef<HTMLCanvasElement>(null)
     type DragMode = "none" | "pan" | "rotate" | "resize"
@@ -67,7 +68,7 @@ export const UnifiedCanvas = forwardRef<UnifiedCanvasRef, UnifiedCanvasProps>(
       ctx.translate(cx + tx.tx, cy + tx.ty)
 
       if (mode === "preview") {
-        ctx.fillStyle = "rgba(59, 130, 246, 0.7)"
+        ctx.fillStyle = `rgba(59, 130, 246, ${Math.max(0, Math.min(1, patternOpacity))})`
       } else {
         ctx.fillStyle = "#ffffff"
       }
@@ -171,7 +172,7 @@ export const UnifiedCanvas = forwardRef<UnifiedCanvasRef, UnifiedCanvasProps>(
         ctx.lineTo(width, cy)
         ctx.stroke()
       }
-    }, [])
+    }, [patternOpacity])
 
     const draw = useCallback(() => {
       const canvas = canvasRef.current

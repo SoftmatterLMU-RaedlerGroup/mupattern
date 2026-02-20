@@ -2,7 +2,7 @@ import { useCallback, useRef, useMemo, useState, useEffect } from "react"
 import { Navigate } from "react-router-dom"
 import { useStore } from "@tanstack/react-store"
 import { AppHeader } from "@/components/AppHeader"
-import { clearAppSession } from "@/lib/clear-session"
+import { LeftSidebar } from "@/register/components/LeftSidebar"
 import { Sidebar } from "@/register/components/Sidebar"
 import { UnifiedCanvas, type UnifiedCanvasRef } from "@/register/components/UnifiedCanvas"
 import { patternToPixels, patternToYAML } from "@/register/lib/units"
@@ -16,6 +16,7 @@ import {
   rotatePattern,
   updateTransform,
   setCalibration,
+  setPatternOpacity,
   resetPatternAndTransform,
   setDetectedPoints,
   clearDetectedPoints,
@@ -81,6 +82,7 @@ export default function RegisterApp() {
   const pattern = useStore(mupatternStore, (s) => s.register.pattern)
   const transform = useStore(mupatternStore, (s) => s.register.transform)
   const calibration = useStore(mupatternStore, (s) => s.register.calibration)
+  const patternOpacity = useStore(mupatternStore, (s) => s.register.patternOpacity)
   const detectedPoints = useStore(mupatternStore, (s) => s.register.detectedPoints)
 
   const phaseContrast = useImageFromDataURL(imageDataURL)
@@ -101,8 +103,8 @@ export default function RegisterApp() {
     URL.revokeObjectURL(link.href)
   }, [pattern, calibration, imageBaseName])
 
-  const handleExport = useCallback(() => {
-    canvasRef.current?.exportAll()
+  const handleSaveCSV = useCallback(() => {
+    canvasRef.current?.exportCSV()
   }, [])
 
   const handleDetect = useCallback(() => {
@@ -146,12 +148,16 @@ export default function RegisterApp() {
         subtitle="Microscopy pattern-to-image registration"
         backTo="/"
         backLabel="Home"
-        onBackClick={() => {
-          clearAppSession()
-          window.location.href = "/"
-        }}
       />
       <div className="flex flex-1 min-h-0">
+        <LeftSidebar
+          hasImage={!!phaseContrast}
+          hasDetectedPoints={!!detectedPoints && detectedPoints.length > 0}
+          onDetect={handleDetect}
+          onFitGrid={handleFitGrid}
+          onReset={handleReset}
+          onSave={handleSaveCSV}
+        />
         <UnifiedCanvas
           ref={canvasRef}
           displayImage={normalizedPhaseContrast}
@@ -162,11 +168,12 @@ export default function RegisterApp() {
           onTransformUpdate={updateTransform}
           onZoom={scalePattern}
           onRotate={rotatePattern}
-          onExportYAML={handleExportYAML}
+          patternOpacity={patternOpacity}
           detectedPoints={detectedPoints}
         />
         <Sidebar
           onConfigLoad={setPattern}
+          onConfigSave={handleExportYAML}
           onCalibrationLoad={setCalibration}
           calibration={calibration}
           onCalibrationChange={setCalibration}
@@ -176,12 +183,8 @@ export default function RegisterApp() {
           onHeightUpdate={updateHeight}
           transform={transform}
           onTransformUpdate={updateTransform}
-          onReset={handleReset}
-          onExport={handleExport}
-          hasImage={!!phaseContrast}
-          hasDetectedPoints={!!detectedPoints && detectedPoints.length > 0}
-          onDetect={handleDetect}
-          onFitGrid={handleFitGrid}
+          patternOpacity={patternOpacity}
+          onPatternOpacityChange={setPatternOpacity}
         />
       </div>
     </div>
