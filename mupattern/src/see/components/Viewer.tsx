@@ -3,15 +3,15 @@ import { useStore } from "@tanstack/react-store";
 import type { DirectoryStore } from "@/see/lib/directory-store";
 import type { StoreIndex, CropInfo } from "@/see/lib/zarr";
 import { loadFrame } from "@/see/lib/zarr";
-import { renderUint16ToCanvas, drawSpots } from "@/see/lib/render";
+import { renderUint16ToCanvas, drawSpots } from "@mupattern/shared/see/lib/render";
 import {
   type Annotations,
   annotationKey,
   parseKey,
   downloadCSV,
   uploadCSV,
-} from "@/see/lib/annotations";
-import { type SpotMap, spotKey, uploadSpotCSV } from "@/see/lib/spots";
+} from "@mupattern/shared/see/lib/annotations";
+import { type SpotMap, spotKey, uploadSpotCSV } from "@mupattern/shared/see/lib/spots";
 import {
   mupatternStore,
   setAnnotations as persistAnnotations,
@@ -25,8 +25,7 @@ import {
   setShowAnnotations as persistShowAnnotations,
   setShowSpots as persistShowSpots,
 } from "@/see/store";
-import { Slider } from "@/components/ui/slider";
-import { Button } from "@/components/ui/button";
+import { Slider, Button } from "@mupattern/shared";
 import {
   ChevronLeft,
   ChevronRight,
@@ -43,7 +42,7 @@ import {
   EyeOff,
   Crosshair,
 } from "lucide-react";
-import { AppHeader } from "@/components/AppHeader";
+import { AppHeader } from "@mupattern/shared";
 import { LeftSidebar } from "@/see/components/LeftSidebar";
 
 const PAGE_SIZE = 9; // 3x3

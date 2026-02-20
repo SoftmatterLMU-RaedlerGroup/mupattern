@@ -14,11 +14,13 @@ function RegisterRoute({ children }: { children: React.ReactElement }) {
 function App() {
   return (
     <BrowserRouter>
-      <Routes>
+      <div className="min-h-full">
+        <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/register" element={<RegisterRoute><RegisterApp /></RegisterRoute>} />
         <Route path="/see" element={<SeeApp />} />
-      </Routes>
+        </Routes>
+      </div>
     </BrowserRouter>
   )
 }

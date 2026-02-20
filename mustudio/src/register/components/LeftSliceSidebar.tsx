@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react"
 import { useStore } from "@tanstack/react-store"
-import { Button } from "@/components/ui/button"
+import { Button } from "@mupattern/shared"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import {
   getWorkspaceVisiblePositionIndices,
@@ -15,7 +15,7 @@ import {
 } from "@/workspace/store"
 import { reloadActiveWorkspaceImage } from "@/register/lib/workspace-image"
 import { buildBBoxCsv } from "@/register/lib/bbox-csv"
-import type { PatternPixels, Transform } from "@/register/types"
+import type { PatternPixels, Transform } from "@mupattern/shared/register/types"
 
 const MIN_SAVE_FEEDBACK_MS = 900
 

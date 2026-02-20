@@ -1,6 +1,7 @@
 import { useRef, useEffect, useCallback, useImperativeHandle, forwardRef } from "react"
-import { useTheme } from "@/components/ThemeProvider"
-import type { PatternPixels, Transform } from "@/register/types"
+import { useTheme } from "@mupattern/shared"
+import type { PatternPixels, Transform } from "@mupattern/shared/register/types"
+import { normalizeAngleRad } from "@mupattern/shared/register/lib/units"
 
 interface UnifiedCanvasProps {
   /** Pre-normalized phase contrast (canvas); drawn as-is, no per-frame normalization. */
@@ -453,12 +454,13 @@ export const UnifiedCanvas = forwardRef<UnifiedCanvasRef, UnifiedCanvasProps>(
         case "rotate": {
           const delta = dx * 0.003
           pendingRotateDeltaRef.current += delta
+          const lat = previewPatternRef.current.lattice
           previewPatternRef.current = {
             ...previewPatternRef.current,
             lattice: {
-              ...previewPatternRef.current.lattice,
-              alpha: previewPatternRef.current.lattice.alpha + delta,
-              beta: previewPatternRef.current.lattice.beta + delta,
+              ...lat,
+              alpha: normalizeAngleRad(lat.alpha + delta),
+              beta: normalizeAngleRad(lat.beta + delta),
             },
           }
           break

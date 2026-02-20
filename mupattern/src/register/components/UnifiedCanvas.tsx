@@ -1,6 +1,6 @@
 import { useRef, useEffect, useCallback, useImperativeHandle, forwardRef } from "react"
-import { useTheme } from "@/components/ThemeProvider"
-import type { PatternPixels, Transform } from "@/register/types"
+import { useTheme } from "@mupattern/shared"
+import type { PatternPixels, Transform } from "@mupattern/shared/register/types"
 
 interface UnifiedCanvasProps {
   /** Pre-normalized phase contrast (canvas); drawn as-is, no per-frame normalization. */

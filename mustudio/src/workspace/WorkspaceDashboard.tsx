@@ -1,10 +1,7 @@
 import { useState, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
 import { useStore } from "@tanstack/react-store"
-import { Button } from "@/components/ui/button"
-import { HexBackground } from "@/components/HexBackground"
-import { ThemeToggle } from "@/components/ThemeToggle"
-import { useTheme } from "@/components/ThemeProvider"
+import { Button, HexBackground, ThemeToggle, useTheme } from "@mupattern/shared"
 import { ArrowLeft, Plus } from "lucide-react"
 import {
   workspaceStore,

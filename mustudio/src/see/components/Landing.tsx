@@ -1,8 +1,5 @@
 import { useNavigate } from "react-router-dom"
-import { Button } from "@/components/ui/button"
-import { HexBackground } from "@/components/HexBackground"
-import { ThemeToggle } from "@/components/ThemeToggle"
-import { useTheme } from "@/components/ThemeProvider"
+import { Button, HexBackground, ThemeToggle, useTheme } from "@mupattern/shared"
 import { FolderOpen } from "lucide-react"
 
 interface LandingProps {

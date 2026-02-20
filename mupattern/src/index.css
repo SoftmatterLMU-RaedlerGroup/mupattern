@@ -1,6 +1,8 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+@source "../node_modules/@mupattern/shared/src/**/*.{ts,tsx}";
+
 @custom-variant dark (&:is(.dark *));
 
 :root {
@@ -113,6 +115,14 @@
 @layer base {
   * {
     @apply border-border;
+  }
+  html,
+  body {
+    height: 100%;
+    min-height: 100%;
+  }
+  #root {
+    min-height: 100%;
   }
   body {
     @apply bg-background text-foreground text-base;

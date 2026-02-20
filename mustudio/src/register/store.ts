@@ -1,4 +1,4 @@
-import { createPersistedStore } from "@/register/lib/persist"
+import { createPersistedStore } from "@mupattern/shared/lib/persist"
 import {
   DEFAULT_PATTERN_UM,
   DEFAULT_TRANSFORM,
@@ -7,7 +7,8 @@ import {
   type Transform,
   type Calibration,
   type Lattice,
-} from "@/register/types"
+} from "@mupattern/shared/register/types"
+import { normalizeAngleRad } from "@mupattern/shared/register/lib/units"
 
 /** Workspace reference to reload image on page reload (small, persisted) */
 export interface ImageSource {
@@ -139,9 +140,12 @@ export function setPattern(pattern: PatternConfigUm) {
 }
 
 export function updateLattice(updates: Partial<Lattice>) {
+  const normalized: Partial<Lattice> = { ...updates }
+  if (updates.alpha !== undefined) normalized.alpha = normalizeAngleRad(updates.alpha)
+  if (updates.beta !== undefined) normalized.beta = normalizeAngleRad(updates.beta)
   appStore.setState((s) => ({
     ...s,
-    pattern: { ...s.pattern, lattice: { ...s.pattern.lattice, ...updates } },
+    pattern: { ...s.pattern, lattice: { ...s.pattern.lattice, ...normalized } },
   }))
 }
 
@@ -182,8 +186,8 @@ export function rotatePattern(deltaRad: number) {
       ...s.pattern,
       lattice: {
         ...s.pattern.lattice,
-        alpha: s.pattern.lattice.alpha + deltaRad,
-        beta: s.pattern.lattice.beta + deltaRad,
+        alpha: normalizeAngleRad(s.pattern.lattice.alpha + deltaRad),
+        beta: normalizeAngleRad(s.pattern.lattice.beta + deltaRad),
       },
     },
   }))

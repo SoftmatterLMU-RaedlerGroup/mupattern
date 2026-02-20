@@ -1,7 +1,5 @@
-import { Slider } from "@/components/ui/slider"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import type { Transform } from "@/register/types"
+import { Slider, Input, Label } from "@mupattern/shared"
+import type { Transform } from "@mupattern/shared/register/types"
 
 interface TransformEditorProps {
   transform: Transform

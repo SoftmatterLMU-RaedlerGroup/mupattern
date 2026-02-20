@@ -1,6 +1,4 @@
-import { HexBackground } from "@/components/HexBackground"
-import { ThemeToggle } from "@/components/ThemeToggle"
-import { useTheme } from "@/components/ThemeProvider"
+import { HexBackground, ThemeToggle, useTheme } from "@mupattern/shared"
 import { PositionPicker } from "@/see/components/PositionPicker"
 
 interface PositionPickerScreenProps {

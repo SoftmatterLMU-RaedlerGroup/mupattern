@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useStore } from "@tanstack/react-store"
-import { AppHeader } from "@/components/AppHeader"
+import { AppHeader } from "@mupattern/shared"
 import { LeftSliceSidebar } from "@/register/components/LeftSliceSidebar"
 import { Sidebar } from "@/register/components/Sidebar"
 import { UnifiedCanvas } from "@/register/components/UnifiedCanvas"
-import { patternToPixels } from "@/register/lib/units"
+import { patternToPixels } from "@mupattern/shared/register/lib/units"
 import {
   appStore,
   setPattern,
@@ -20,9 +20,9 @@ import {
   setDetectedPoints,
   clearDetectedPoints,
 } from "@/register/store"
-import { detectGridPoints, fitGrid } from "@/register/lib/autodetect"
-import { pixelsToUm } from "@/register/lib/units"
-import { normalizeImageDataForDisplayAsync } from "@/register/lib/normalize"
+import { detectGridPoints, fitGrid } from "@mupattern/shared/register/lib/autodetect"
+import { pixelsToUm } from "@mupattern/shared/register/lib/units"
+import { normalizeImageDataForDisplayAsync } from "@/register/lib/normalize" // mustudio-specific async worker
 import { loadImageFromSource, reloadActiveWorkspaceImage } from "@/register/lib/workspace-image"
 import { workspaceStore } from "@/workspace/store"
 

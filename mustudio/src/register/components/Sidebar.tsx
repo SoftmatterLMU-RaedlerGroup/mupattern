@@ -1,15 +1,11 @@
 import { useCallback, useRef } from "react"
 import { ChevronsUpDown } from "lucide-react"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { Separator } from "@/components/ui/separator"
-import { Button } from "@/components/ui/button"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger, Separator, Button, Slider, Label } from "@mupattern/shared"
 import { CalibrationControls } from "@/register/components/CalibrationControls"
 import { PatternEditor } from "@/register/components/PatternEditor"
 import { TransformEditor } from "@/register/components/TransformEditor"
-import { Slider } from "@/components/ui/slider"
-import { Label } from "@/components/ui/label"
-import { parseYAMLConfig, patternToYAML } from "@/register/lib/units"
-import type { Calibration, Lattice, PatternConfigUm, Transform } from "@/register/types"
+import { parseYAMLConfig, patternToYAML } from "@mupattern/shared/register/lib/units"
+import type { Calibration, Lattice, PatternConfigUm, Transform } from "@mupattern/shared/register/types"
 
 interface SidebarProps {
   onConfigLoad: (config: PatternConfigUm) => void

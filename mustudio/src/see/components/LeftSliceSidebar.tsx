@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from "react"
 import { useStore } from "@tanstack/react-store"
 import { useNavigate } from "react-router-dom"
-import { Button } from "@/components/ui/button"
+import { Button } from "@mupattern/shared"
 import { ChevronLeft, ChevronRight, Home } from "lucide-react"
 import {
   workspaceStore,

@@ -1,3 +1,4 @@
 {
-  "private": true
+  "private": true,
+  "workspaces": ["mupattern", "mustudio", "packages/shared"]
 }
