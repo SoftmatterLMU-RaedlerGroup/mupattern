@@ -13,7 +13,8 @@ import {
   type Transform,
   type Calibration,
   type Lattice,
-} from "@/register/types"
+} from "@mupattern/shared/register/types"
+import { normalizeAngleRad } from "@mupattern/shared/register/lib/units"
 
 // --- Register slice ---
 
@@ -115,13 +116,16 @@ export function setPattern(pattern: PatternConfigUm) {
 }
 
 export function updateLattice(updates: Partial<Lattice>) {
+  const normalized: Partial<Lattice> = { ...updates }
+  if (updates.alpha !== undefined) normalized.alpha = normalizeAngleRad(updates.alpha)
+  if (updates.beta !== undefined) normalized.beta = normalizeAngleRad(updates.beta)
   mupatternStore.setState((s) => ({
     ...s,
     register: {
       ...s.register,
       pattern: {
         ...s.register.pattern,
-        lattice: { ...s.register.pattern.lattice, ...updates },
+        lattice: { ...s.register.pattern.lattice, ...normalized },
       },
     },
   }))
@@ -175,8 +179,8 @@ export function rotatePattern(deltaRad: number) {
         ...s.register.pattern,
         lattice: {
           ...s.register.pattern.lattice,
-          alpha: s.register.pattern.lattice.alpha + deltaRad,
-          beta: s.register.pattern.lattice.beta + deltaRad,
+          alpha: normalizeAngleRad(s.register.pattern.lattice.alpha + deltaRad),
+          beta: normalizeAngleRad(s.register.pattern.lattice.beta + deltaRad),
         },
       },
     },

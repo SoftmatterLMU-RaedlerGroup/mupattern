@@ -1,11 +1,11 @@
 import { useCallback, useRef, useMemo, useState, useEffect } from "react"
 import { Navigate } from "react-router-dom"
 import { useStore } from "@tanstack/react-store"
-import { AppHeader } from "@/components/AppHeader"
+import { AppHeader } from "@mupattern/shared"
 import { LeftSidebar } from "@/register/components/LeftSidebar"
 import { Sidebar } from "@/register/components/Sidebar"
 import { UnifiedCanvas, type UnifiedCanvasRef } from "@/register/components/UnifiedCanvas"
-import { patternToPixels, patternToYAML } from "@/register/lib/units"
+import { patternToPixels, patternToYAML } from "@mupattern/shared/register/lib/units"
 import {
   mupatternStore,
   setPattern,
@@ -21,9 +21,9 @@ import {
   setDetectedPoints,
   clearDetectedPoints,
 } from "@/register/store"
-import { detectGridPoints, fitGrid } from "@/register/lib/autodetect"
-import { pixelsToUm } from "@/register/lib/units"
-import { normalizeImageDataForDisplay } from "@/register/lib/normalize"
+import { detectGridPoints, fitGrid } from "@mupattern/shared/register/lib/autodetect"
+import { pixelsToUm } from "@mupattern/shared/register/lib/units"
+import { normalizeImageDataForDisplay } from "@mupattern/shared/register/lib/normalize"
 
 /** Convert a data URL to an HTMLImageElement (async). */
 function useImageFromDataURL(dataURL: string | null): HTMLImageElement | null {

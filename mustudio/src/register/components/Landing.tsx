@@ -1,12 +1,8 @@
 import { useState, useCallback, useRef } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { HexBackground } from "@/components/HexBackground"
+import { Button, Input, Label, HexBackground } from "@mupattern/shared"
 import { ImageIcon, Ruler } from "lucide-react"
 import * as UTIF from "utif2"
-import { ThemeToggle } from "@/components/ThemeToggle"
-import { useTheme } from "@/components/ThemeProvider"
+import { ThemeToggle, useTheme } from "@mupattern/shared"
 
 const ACCEPTED_TYPES = new Set(["image/png", "image/tiff", "image/tif"])
 const TIFF_TYPES = new Set(["image/tiff", "image/tif"])

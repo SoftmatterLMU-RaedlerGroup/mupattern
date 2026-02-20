@@ -1,10 +1,7 @@
 import { memo } from "react"
-import { Slider } from "@/components/ui/slider"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Button } from "@/components/ui/button"
-import { radToDeg, degToRad } from "@/register/lib/units"
-import type { Lattice, PatternConfigUm } from "@/register/types"
+import { Slider, Input, Label, Button } from "@mupattern/shared"
+import { radToDeg, degToRad } from "@mupattern/shared/register/lib/units"
+import type { Lattice, PatternConfigUm } from "@mupattern/shared/register/types"
 
 interface PatternEditorProps {
   pattern: PatternConfigUm

@@ -1,4 +1,4 @@
-import { createPersistedStore } from "@/see/lib/persist"
+import { createPersistedStore } from "@mupattern/shared/lib/persist"
 
 export interface ViewerState {
   /** Annotations as [key, value] pairs (Map can't be JSON-serialized directly) */

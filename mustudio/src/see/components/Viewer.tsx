@@ -3,16 +3,16 @@ import { useStore } from "@tanstack/react-store";
 import type { StoreIndex, CropInfo, ZarrStore } from "@/see/lib/zarr";
 import { loadFrame, loadMaskFrame, hasMasks } from "@/see/lib/zarr";
 import { loadBatchWithRetryOnTotalFailure } from "@/see/lib/frame-loader";
-import { renderUint16ToCanvas, drawSpots, drawMaskContours } from "@/see/lib/render";
-import { labelMapToContours } from "@/see/lib/contours";
+import { renderUint16ToCanvas, drawSpots, drawMaskContours } from "@mupattern/shared/see/lib/render";
+import { labelMapToContours } from "@mupattern/shared/see/lib/contours";
 import {
   type Annotations,
   annotationKey,
   parseKey,
   downloadCSV,
   uploadCSV,
-} from "@/see/lib/annotations";
-import { type SpotMap, spotKey, uploadSpotCSV } from "@/see/lib/spots";
+} from "@mupattern/shared/see/lib/annotations";
+import { type SpotMap, spotKey, uploadSpotCSV } from "@mupattern/shared/see/lib/spots";
 import {
   viewerStore,
   setAnnotations as persistAnnotations,
@@ -29,10 +29,8 @@ import {
   setShowSpots as persistShowSpots,
   setShowMasks as persistShowMasks,
 } from "@/see/store";
-import { AppHeader } from "@/components/AppHeader";
+import { AppHeader, Slider, Button } from "@mupattern/shared";
 import { LeftSliceSidebar } from "@/see/components/LeftSliceSidebar";
-import { Slider } from "@/components/ui/slider";
-import { Button } from "@/components/ui/button";
 import {
   ChevronLeft,
   ChevronRight,

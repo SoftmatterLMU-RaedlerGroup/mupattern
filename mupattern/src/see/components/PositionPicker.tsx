@@ -6,9 +6,9 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+  Button,
+  Checkbox,
+} from "@mupattern/shared";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 const POS_PER_PAGE = 30; // 5 columns x 6 rows

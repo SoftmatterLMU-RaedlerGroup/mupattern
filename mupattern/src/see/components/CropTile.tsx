@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, memo } from "react";
 import type { DirectoryStore } from "@/see/lib/directory-store";
 import { loadFrame } from "@/see/lib/zarr";
-import { renderUint16ToCanvas, autoContrast } from "@/see/lib/render";
+import { renderUint16ToCanvas, autoContrast } from "@mupattern/shared/see/lib/render";
 import type { CropInfo } from "@/see/lib/zarr";
 
 interface CropTileProps {

@@ -1,9 +1,6 @@
 import { useState, useCallback, useRef } from "react"
 import { useNavigate } from "react-router-dom"
-import { Button } from "@/components/ui/button"
-import { HexBackground } from "@/components/HexBackground"
-import { ThemeToggle } from "@/components/ThemeToggle"
-import { useTheme } from "@/components/ThemeProvider"
+import { Button, HexBackground, ThemeToggle, useTheme } from "@mupattern/shared"
 import { Microscope, Eye } from "lucide-react"
 import { loadImageFile, imageToDataURL } from "@/lib/load-image"
 import { startWithImage } from "@/register/store"
@@ -70,7 +67,7 @@ export default function Landing() {
   }, [navigate])
 
   return (
-    <div className="relative flex flex-col items-center justify-center min-h-screen gap-8 p-6">
+    <div className="relative flex min-h-[100dvh] flex-col items-center justify-center gap-8 p-6">
       <HexBackground theme={theme} />
 
       <div className="absolute top-4 right-4 z-10">

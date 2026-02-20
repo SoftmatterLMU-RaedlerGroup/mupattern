@@ -1,4 +1,4 @@
-import type { PatternPixels, Transform } from "@/register/types"
+import type { PatternPixels, Transform } from "@mupattern/shared/register/types"
 
 export function buildBBoxCsv(
   canvasSize: { width: number; height: number },

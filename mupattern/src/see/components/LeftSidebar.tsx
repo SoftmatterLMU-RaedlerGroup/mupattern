@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button"
+import { Button } from "@mupattern/shared"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 
 interface LeftSidebarProps {

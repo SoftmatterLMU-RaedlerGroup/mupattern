@@ -1,8 +1,5 @@
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Slider } from "@/components/ui/slider"
-import { Button } from "@/components/ui/button"
-import type { Calibration } from "@/register/types"
+import { Input, Label, Slider, Button } from "@mupattern/shared"
+import type { Calibration } from "@mupattern/shared/register/types"
 
 interface CalibrationControlsProps {
   calibration: Calibration
