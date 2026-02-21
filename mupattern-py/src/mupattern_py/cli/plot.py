@@ -29,10 +29,11 @@ def expression(
             help="CSV from expression (t,crop,intensity,area,background).",
         ),
     ],
-    output: Annotated[Path, typer.Option(help="Output directory for plots.")],
+    output: Annotated[Path, typer.Option(help="Output plot image path (e.g. Pos0_expression.png).")],
 ) -> None:
-    """Plot raw intensity and background-corrected total fluor per crop."""
+    """Plot background-corrected total fluor per crop (matches desktop ExpressionTab)."""
     run_expression_plot(input, output)
+    typer.echo(f"Saved plot to {output}")
 
 
 @app.command("kill")
