@@ -787,9 +787,9 @@ dependencies = [
 
 [[package]]
 name = "nd2-rs"
-version = "0.1.1"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68aa7970c2f427e5edcff8acd01d795f287243d353a6d5fc8b50d037dc7d3c7f"
+checksum = "d9019556795ed3d7c092b5c917bfc3c8fad76658c77d0e06b97fb8661ea888ff"
 dependencies = [
  "byteorder",
  "clap",
