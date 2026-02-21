@@ -15,7 +15,7 @@ from typing import Annotated
 
 import typer
 
-from ..apps.kill.core import run_clean, run_dataset, run_plot, run_predict, run_train
+from ..apps.kill.core import run_clean, run_dataset, run_export_onnx, run_plot, run_predict, run_train
 
 app = typer.Typer(
     add_completion=False,
@@ -179,6 +179,25 @@ def predict(
     except ValueError as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=1) from e
+
+
+@app.command()
+def export_onnx(
+    model: Annotated[
+        str,
+        typer.Option(
+            help="Local path or HuggingFace repo ID (e.g. keejkrej/mupattern-resnet18).",
+        ),
+    ],
+    output: Annotated[
+        Path,
+        typer.Option(help="Output directory for the ONNX model."),
+    ],
+) -> None:
+    """Export a trained model to ONNX format for use in mustudio."""
+    typer.echo(f"Exporting {model} to ONNX...")
+    run_export_onnx(model, output)
+    typer.echo(f"Saved ONNX model to {output}")
 
 
 @app.command()

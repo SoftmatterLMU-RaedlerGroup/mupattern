@@ -153,6 +153,8 @@ declare global {
       }
       tasks: {
         pickCropsDestination: () => Promise<{ path: string } | null>
+        pickExpressionOutput: () => Promise<{ path: string } | null>
+        pickKillModel: () => Promise<{ path: string } | null>
         pickMovieOutput: () => Promise<{ path: string } | null>
         pickSpotsFile: () => Promise<{ path: string } | null>
         hasBboxCsv: (payload: { workspacePath: string; pos: number }) => Promise<boolean>
@@ -165,6 +167,23 @@ declare global {
           background: boolean
         }) => Promise<{ ok: true } | { ok: false; error: string }>
         onCropProgress: (callback: (ev: { taskId: string; progress: number; message: string }) => void) => () => void
+        runExpressionAnalyze: (payload: {
+          taskId: string
+          workspacePath: string
+          pos: number
+          channel: number
+          output: string
+        }) => Promise<{ ok: true; output: string; rows: Array<{ t: number; crop: string; intensity: number; area: number; background: number }> } | { ok: false; error: string }>
+        onExpressionAnalyzeProgress: (callback: (ev: { taskId: string; progress: number; message: string }) => void) => () => void
+        runKillPredict: (payload: {
+          taskId: string
+          workspacePath: string
+          pos: number
+          modelPath: string
+          output: string
+          batchSize?: number
+        }) => Promise<{ ok: true; output: string; rows: Array<{ t: number; crop: string; label: boolean }> } | { ok: false; error: string }>
+        onKillPredictProgress: (callback: (ev: { taskId: string; progress: number; message: string }) => void) => () => void
         runMovie: (payload: {
           taskId: string
           input_zarr: string

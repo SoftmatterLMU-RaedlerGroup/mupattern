@@ -5,6 +5,7 @@ import WorkspaceDashboard from "@/workspace/WorkspaceDashboard"
 import RegisterApp from "@/register/RegisterApp"
 import SeeApp from "@/see/SeeApp"
 import TasksDashboardPage from "@/tasks/TasksDashboardPage"
+import ApplicationApp from "@/application/ApplicationApp"
 import { appStore } from "@/register/store"
 import { workspaceStore } from "@/workspace/store"
 
@@ -37,6 +38,7 @@ function App() {
         <Route path="/register" element={<WorkspaceOnlyRoute><RegisterApp /></WorkspaceOnlyRoute>} />
         <Route path="/see" element={<WorkspaceOnlyRoute><SeeApp /></WorkspaceOnlyRoute>} />
         <Route path="/tasks" element={<WorkspaceOnlyRoute><TasksDashboardPage /></WorkspaceOnlyRoute>} />
+        <Route path="/application" element={<WorkspaceOnlyRoute><ApplicationApp /></WorkspaceOnlyRoute>} />
       </Routes>
       </div>
     </BrowserRouter>

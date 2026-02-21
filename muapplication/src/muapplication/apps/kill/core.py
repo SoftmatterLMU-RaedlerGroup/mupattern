@@ -375,6 +375,18 @@ def run_predict(
         on_progress(1.0, f"Wrote {len(results)} predictions to {output}")
 
 
+def run_export_onnx(model_path: str, output_path: Path) -> None:
+    """Export a HuggingFace image classification model to ONNX format."""
+    from optimum.onnxruntime import ORTModelForImageClassification
+
+    model = ORTModelForImageClassification.from_pretrained(
+        model_path,
+        export=True,
+    )
+    output_path.mkdir(parents=True, exist_ok=True)
+    model.save_pretrained(str(output_path))
+
+
 def run_plot(input_csv: Path, output: Path) -> None:
     """Plot kill curve: number of present cells over time."""
     import matplotlib

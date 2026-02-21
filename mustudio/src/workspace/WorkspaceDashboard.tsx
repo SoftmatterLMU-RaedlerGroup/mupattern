@@ -435,6 +435,9 @@ export default function WorkspaceDashboard() {
                 <Button size="sm" variant="outline" onClick={() => navigate("/tasks")}>
                   Tasks
                 </Button>
+                <Button size="sm" variant="outline" onClick={() => navigate("/application")}>
+                  Application
+                </Button>
               </div>
             </div>
             </>

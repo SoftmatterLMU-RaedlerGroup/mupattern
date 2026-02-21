@@ -33,5 +33,6 @@ __pycache__/
 
 # Model weights (too large for git)
 data/model/
+onnx_models/*/
 .serena/
 .claude/

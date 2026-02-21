@@ -138,6 +138,85 @@ interface HasMasksResponse {
   hasMasks: boolean
 }
 
+interface ExpressionAnalyzeRequest {
+  workspacePath: string
+  pos: number
+  channel: number
+}
+
+interface ExpressionAnalyzeRow {
+  t: number
+  crop: string
+  intensity: number
+  area: number
+  background: number
+}
+
+interface ExpressionAnalyzeSuccess {
+  ok: true
+  rows: ExpressionAnalyzeRow[]
+}
+
+interface ExpressionAnalyzeFailure {
+  ok: false
+  error: string
+}
+
+type ExpressionAnalyzeResponse = ExpressionAnalyzeSuccess | ExpressionAnalyzeFailure
+
+interface RunExpressionAnalyzeRequest {
+  taskId: string
+  workspacePath: string
+  pos: number
+  channel: number
+  output: string
+}
+
+interface RunExpressionAnalyzeSuccess {
+  ok: true
+  output: string
+  rows: ExpressionAnalyzeRow[]
+}
+
+interface RunExpressionAnalyzeFailure {
+  ok: false
+  error: string
+}
+
+type RunExpressionAnalyzeResponse = RunExpressionAnalyzeSuccess | RunExpressionAnalyzeFailure
+
+interface RunKillPredictRequest {
+  taskId: string
+  workspacePath: string
+  pos: number
+  modelPath: string
+  output: string
+  batchSize?: number
+  tStart?: number
+  tEnd?: number
+  cropStart?: number
+  cropEnd?: number
+}
+
+interface KillPredictRow {
+  t: number
+  crop: string
+  label: boolean
+}
+
+interface RunKillPredictSuccess {
+  ok: true
+  output: string
+  rows: KillPredictRow[]
+}
+
+interface RunKillPredictFailure {
+  ok: false
+  error: string
+}
+
+type RunKillPredictResponse = RunKillPredictSuccess | RunKillPredictFailure
+
 interface LoadMaskFrameRequest {
   masksPath: string
   posId: string
@@ -1074,6 +1153,189 @@ async function loadZarrFrame({
   }
 }
 
+function sumArray(data: ArrayLike<number>): number {
+  let s = 0
+  for (let i = 0; i < data.length; i++) s += data[i]
+  return s
+}
+
+async function expressionAnalyze(
+  request: ExpressionAnalyzeRequest,
+  options?: { output?: string; sendProgress?: (progress: number, message: string) => void }
+): Promise<ExpressionAnalyzeResponse> {
+  const { workspacePath, pos, channel } = request
+  const sendProgress = options?.sendProgress
+  try {
+    const posId = String(pos).padStart(3, "0")
+    const cropRoot = path.join(workspacePath, "crops.zarr", "pos", posId, "crop")
+
+    let cropIds: string[]
+    try {
+      const entries = await readdir(cropRoot, { withFileTypes: true })
+      cropIds = entries
+        .filter((e) => e.isDirectory())
+        .map((e) => e.name)
+        .sort()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      return { ok: false, error: `Failed to read crop dir: ${msg}` }
+    }
+
+    if (cropIds.length === 0) {
+      if (options?.output) {
+        await mkdir(path.dirname(options.output), { recursive: true })
+        await writeFile(options.output, "t,crop,intensity,area,background\n", "utf8")
+      }
+      return { ok: true, rows: [] }
+    }
+
+    const context = await getZarrContext(workspacePath)
+    const { zarr } = await getZarrDeps()
+    let bgArr: ZarrArrayHandle | null = null
+    try {
+      const bgLoc = context.root.resolve(`pos/${posId}/background`)
+      bgArr = await zarr.open(bgLoc as Parameters<typeof zarr.open>[0], { kind: "array" })
+    } catch {
+      // no background array, use 0
+    }
+
+    const rows: ExpressionAnalyzeRow[] = []
+    const total = cropIds.length
+
+    for (let i = 0; i < total; i++) {
+      const cropId = cropIds[i]
+      let arr: ZarrArrayHandle
+      try {
+        arr = await getCachedZarrArray(workspacePath, posId, cropId)
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        return { ok: false, error: `Failed to open crop ${cropId}: ${msg}` }
+      }
+
+      const [nT, , , h, w] = arr.shape
+      const area = h * w
+
+      for (let t = 0; t < nT; t++) {
+        let chunk: ZarrChunk
+        try {
+          chunk = await arr.getChunk([t, channel, 0, 0, 0])
+        } catch (err) {
+          context.arrays.delete(`${posId}/${cropId}`)
+          arr = await getCachedZarrArray(workspacePath, posId, cropId)
+          chunk = await arr.getChunk([t, channel, 0, 0, 0])
+        }
+
+        const source = chunk.data as ArrayLike<number>
+        const intensity = sumArray(source)
+
+        let background = 0
+        if (bgArr && t < bgArr.shape[0] && channel < bgArr.shape[1]) {
+          try {
+            const bgChunk = await bgArr.getChunk([t, channel, 0])
+            const bgData = bgChunk.data as ArrayLike<number>
+            background = bgData.length > 0 ? bgData[0] : 0
+          } catch {
+            // keep 0
+          }
+        }
+
+        rows.push({ t, crop: cropId, intensity, area, background })
+      }
+
+      if (sendProgress && total > 0) {
+        sendProgress((i + 1) / total, `Processing crop ${i + 1}/${total}`)
+      }
+    }
+
+    if (options?.output) {
+      await mkdir(path.dirname(options.output), { recursive: true })
+      const lines = ["t,crop,intensity,area,background", ...rows.map((r) => `${r.t},${r.crop},${r.intensity},${r.area},${r.background}`)]
+      await writeFile(options.output, lines.join("\n"), "utf8")
+      if (sendProgress) sendProgress(1.0, `Wrote ${rows.length} rows to ${options.output}`)
+    }
+
+    return { ok: true, rows }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    return { ok: false, error: message || "Expression analyze failed." }
+  }
+}
+
+async function runExpressionAnalyzeTask(
+  request: RunExpressionAnalyzeRequest,
+  sendProgress: (progress: number, message: string) => void
+): Promise<RunExpressionAnalyzeResponse> {
+  const { taskId: _taskId, workspacePath, pos, channel, output } = request
+  const result = await expressionAnalyze(
+    { workspacePath, pos, channel },
+    { output, sendProgress }
+  )
+  if (result.ok) {
+    return { ok: true, output, rows: result.rows }
+  }
+  return { ok: false, error: result.error }
+}
+
+async function runKillPredictTask(
+  request: RunKillPredictRequest,
+  sendProgress: (progress: number, message: string) => void
+): Promise<RunKillPredictResponse> {
+  const { runKillPredict } = await import("./kill-inference.js")
+  const context = await getZarrContext(request.workspacePath)
+
+  const listCrops = async (_workspacePath: string, posId: string): Promise<string[]> => {
+    const p = path.join(request.workspacePath, "crops.zarr", "pos", posId, "crop")
+    const entries = await readdir(p, { withFileTypes: true })
+    return entries.filter((e) => e.isDirectory()).map((e) => e.name).sort()
+  }
+
+  const getCropShape = async (
+    workspacePath: string,
+    posId: string,
+    cropId: string
+  ): Promise<{ nT: number }> => {
+    const arr = await getCachedZarrArray(workspacePath, posId, cropId)
+    return { nT: arr.shape[0] }
+  }
+
+  const getCropChunk = async (
+    workspacePath: string,
+    posId: string,
+    cropId: string,
+    t: number,
+    c: number,
+    z: number
+  ): Promise<{ data: Uint16Array; height: number; width: number }> => {
+    let arr = await getCachedZarrArray(workspacePath, posId, cropId)
+    let chunk: ZarrChunk
+    try {
+      chunk = await arr.getChunk([t, c, z, 0, 0])
+    } catch {
+      context.arrays.delete(`${posId}/${cropId}`)
+      arr = await getCachedZarrArray(workspacePath, posId, cropId)
+      chunk = await arr.getChunk([t, c, z, 0, 0])
+    }
+    const source = chunk.data
+    const typed =
+      source instanceof Uint16Array
+        ? source
+        : Uint16Array.from(source as ArrayLike<number>)
+    const data = new Uint16Array(typed.length)
+    data.set(typed)
+    const height = chunk.shape[chunk.shape.length - 2]
+    const width = chunk.shape[chunk.shape.length - 1]
+    return { data, height, width }
+  }
+
+  return runKillPredict({
+    ...request,
+    getCropChunk,
+    getCropShape,
+    listCrops,
+    sendProgress,
+  })
+}
+
 async function hasMasks({ masksPath }: HasMasksRequest): Promise<HasMasksResponse> {
   try {
     await access(masksPath, constants.R_OK)
@@ -1265,7 +1527,7 @@ async function insertTask(task: TaskRecord): Promise<void> {
 
 async function updateTask(
   id: string,
-  updates: Partial<Pick<TaskRecord, "status" | "finished_at" | "error" | "progress_events">>
+  updates: Partial<Pick<TaskRecord, "status" | "finished_at" | "error" | "progress_events" | "result">>
 ): Promise<void> {
   const db = await ensureWorkspaceDb()
   const sets: string[] = []
@@ -1281,6 +1543,10 @@ async function updateTask(
   if (updates.error != null) {
     sets.push("error = ?")
     values.push(updates.error)
+  }
+  if (updates.result !== undefined) {
+    sets.push("result_json = ?")
+    values.push(updates.result ? JSON.stringify(updates.result) : null)
   }
   if (updates.progress_events != null) {
     sets.push("progress_events_json = ?")
@@ -1405,6 +1671,37 @@ function registerWorkspaceStateIpc(): void {
     return { path: path.join(result.filePaths[0], "crops.zarr") }
   })
 
+  ipcMain.handle(
+    "tasks:pick-kill-model",
+    async (): Promise<{ path: string } | null> => {
+      const result = await dialog.showOpenDialog({
+        title: "Select ONNX model directory",
+        properties: ["openDirectory"],
+      })
+      if (result.canceled || result.filePaths.length === 0) return null
+      const dir = result.filePaths[0]
+      try {
+        await access(path.join(dir, "model.onnx"), constants.R_OK)
+      } catch {
+        return null
+      }
+      return { path: dir }
+    }
+  )
+
+  ipcMain.handle(
+    "tasks:pick-expression-output",
+    async (): Promise<{ path: string } | null> => {
+      const result = await dialog.showSaveDialog({
+        title: "Save expression CSV",
+        filters: [{ name: "CSV", extensions: ["csv"] }],
+        defaultPath: "expression.csv",
+      })
+      if (result.canceled || !result.filePath) return null
+      return { path: result.filePath }
+    }
+  )
+
   ipcMain.handle("tasks:pick-movie-output", async (): Promise<{ path: string } | null> => {
     const result = await dialog.showSaveDialog({
       title: "Save movie as",
@@ -1475,6 +1772,70 @@ function registerWorkspaceStateIpc(): void {
   )
 
   ipcMain.handle(
+    "tasks:run-expression-analyze",
+    async (
+      event: Electron.IpcMainInvokeEvent,
+      payload: RunExpressionAnalyzeRequest
+    ): Promise<RunExpressionAnalyzeResponse> => {
+      const progressEvents: Array<{ progress: number; message: string; timestamp: string }> = []
+      const sendProgress = (progress: number, message: string) => {
+        progressEvents.push({
+          progress,
+          message,
+          timestamp: new Date().toISOString(),
+        })
+        event.sender.send("tasks:expression-analyze-progress", {
+          taskId: payload.taskId,
+          progress,
+          message,
+        })
+        updateTask(payload.taskId, { progress_events: progressEvents }).catch(() => {})
+      }
+      const result = await runExpressionAnalyzeTask(payload, sendProgress)
+      await updateTask(payload.taskId, {
+        status: result.ok ? "succeeded" : "failed",
+        finished_at: new Date().toISOString(),
+        error: result.ok ? null : result.error,
+        result: result.ok ? { output: result.output, rows: result.rows } : undefined,
+        progress_events: progressEvents,
+      })
+      return result
+    }
+  )
+
+  ipcMain.handle(
+    "tasks:run-kill-predict",
+    async (
+      event: Electron.IpcMainInvokeEvent,
+      payload: RunKillPredictRequest
+    ): Promise<RunKillPredictResponse> => {
+      const progressEvents: Array<{ progress: number; message: string; timestamp: string }> = []
+      const sendProgress = (progress: number, message: string) => {
+        progressEvents.push({
+          progress,
+          message,
+          timestamp: new Date().toISOString(),
+        })
+        event.sender.send("tasks:kill-predict-progress", {
+          taskId: payload.taskId,
+          progress,
+          message,
+        })
+        updateTask(payload.taskId, { progress_events: progressEvents }).catch(() => {})
+      }
+      const result = await runKillPredictTask(payload, sendProgress)
+      await updateTask(payload.taskId, {
+        status: result.ok ? "succeeded" : "failed",
+        finished_at: new Date().toISOString(),
+        error: result.ok ? null : result.error,
+        result: result.ok ? { output: result.output, rows: result.rows } : undefined,
+        progress_events: progressEvents,
+      })
+      return result
+    }
+  )
+
+  ipcMain.handle(
     "tasks:run-crop",
     async (
       event: Electron.IpcMainInvokeEvent,
@@ -1515,7 +1876,7 @@ function registerWorkspaceStateIpc(): void {
     async (
       _event,
       id: string,
-      updates: Partial<Pick<TaskRecord, "status" | "finished_at" | "error" | "progress_events">>
+      updates: Partial<Pick<TaskRecord, "status" | "finished_at" | "error" | "progress_events" | "result">>
     ) => {
       await updateTask(id, updates)
       return true

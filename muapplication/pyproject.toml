@@ -27,6 +27,7 @@ dependencies = [
     "spotiflow>=0.5",
     "customtkinter>=5.0",
     "cellpose>=4.0",
+    "optimum[onnxruntime]>=1.20",
     "cellSAM @ git+https://github.com/vanvalenlab/cellSAM.git",
     "scikit-image>=0.22",
 ]

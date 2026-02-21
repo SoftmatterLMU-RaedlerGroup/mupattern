@@ -6,6 +6,8 @@ import { ArrowLeft, Plus } from "lucide-react"
 import { workspaceStore } from "@/workspace/store"
 import { CropTaskConfigModal } from "@/tasks/components/CropTaskConfigModal"
 import { MovieTaskConfigModal } from "@/tasks/components/MovieTaskConfigModal"
+import { ExpressionTaskConfigModal } from "@/tasks/components/ExpressionTaskConfigModal"
+import { KillTaskConfigModal } from "@/tasks/components/KillTaskConfigModal"
 
 interface TaskRecord {
   id: string
@@ -15,7 +17,15 @@ interface TaskRecord {
   started_at: string | null
   finished_at: string | null
   request: Record<string, unknown>
-  result: Record<string, unknown> | null
+  result:
+    | {
+        output?: string
+        rows?:
+          | Array<{ t: number; crop: string; intensity: number; area: number; background: number }>
+          | Array<{ t: number; crop: string; label: boolean }>
+      }
+    | Record<string, unknown>
+    | null
   error: string | null
   logs: string[]
   progress_events: Array<{ progress: number; message: string; timestamp: string }>
@@ -31,6 +41,8 @@ export default function TasksDashboardPage() {
   const [addMenuOpen, setAddMenuOpen] = useState(false)
   const [cropModalOpen, setCropModalOpen] = useState(false)
   const [movieModalOpen, setMovieModalOpen] = useState(false)
+  const [expressionModalOpen, setExpressionModalOpen] = useState(false)
+  const [killModalOpen, setKillModalOpen] = useState(false)
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const progressUnsubscribeRef = useRef<(() => void) | null>(null)
@@ -145,6 +157,172 @@ export default function TasksDashboardPage() {
               status: result.ok ? "succeeded" : "failed",
               finished_at: new Date().toISOString(),
               error: result.ok ? null : result.error,
+            }
+          })
+        )
+      } catch (e) {
+        progressUnsubscribeRef.current?.()
+        progressUnsubscribeRef.current = null
+        setError(e instanceof Error ? e.message : String(e))
+        setTasks((prev) =>
+          prev.map((t) => {
+            if (t.id !== taskId) return t
+            return {
+              ...t,
+              status: "failed",
+              finished_at: new Date().toISOString(),
+              error: e instanceof Error ? e.message : String(e),
+            }
+          })
+        )
+      }
+    },
+    [activeWorkspace]
+  )
+
+  const handleCreateExpressionAnalyze = useCallback(
+    async (params: { workspacePath: string; pos: number; channel: number; output: string }) => {
+      if (!activeWorkspace?.rootPath) return
+      setError(null)
+      const taskId = crypto.randomUUID()
+      const task: TaskRecord = {
+        id: taskId,
+        kind: "expression.analyze",
+        status: "running",
+        created_at: new Date().toISOString(),
+        started_at: new Date().toISOString(),
+        finished_at: null,
+        request: params,
+        result: null,
+        error: null,
+        logs: [],
+        progress_events: [],
+      }
+      await window.mustudio.tasks.insertTask(task as unknown)
+      setTasks((prev) => [task, ...prev])
+      setSelectedTaskId(taskId)
+      setExpressionModalOpen(false)
+      setAddMenuOpen(false)
+
+      progressUnsubscribeRef.current = window.mustudio.tasks.onExpressionAnalyzeProgress((ev) => {
+        if (ev.taskId !== taskId) return
+        setTasks((prev) =>
+          prev.map((t) => {
+            if (t.id !== taskId) return t
+            return {
+              ...t,
+              progress_events: [
+                ...t.progress_events,
+                {
+                  progress: ev.progress,
+                  message: ev.message,
+                  timestamp: new Date().toISOString(),
+                },
+              ],
+            }
+          })
+        )
+      })
+
+      try {
+        const result = await window.mustudio.tasks.runExpressionAnalyze({
+          taskId,
+          ...params,
+        })
+        progressUnsubscribeRef.current?.()
+        progressUnsubscribeRef.current = null
+        setTasks((prev) =>
+          prev.map((t) => {
+            if (t.id !== taskId) return t
+            return {
+              ...t,
+              status: result.ok ? "succeeded" : "failed",
+              finished_at: new Date().toISOString(),
+              error: result.ok ? null : result.error,
+              result: result.ok ? { output: result.output, rows: result.rows } : null,
+            }
+          })
+        )
+      } catch (e) {
+        progressUnsubscribeRef.current?.()
+        progressUnsubscribeRef.current = null
+        setError(e instanceof Error ? e.message : String(e))
+        setTasks((prev) =>
+          prev.map((t) => {
+            if (t.id !== taskId) return t
+            return {
+              ...t,
+              status: "failed",
+              finished_at: new Date().toISOString(),
+              error: e instanceof Error ? e.message : String(e),
+            }
+          })
+        )
+      }
+    },
+    [activeWorkspace]
+  )
+
+  const handleCreateKillPredict = useCallback(
+    async (params: { workspacePath: string; pos: number; modelPath: string; output: string }) => {
+      if (!activeWorkspace?.rootPath) return
+      setError(null)
+      const taskId = crypto.randomUUID()
+      const task: TaskRecord = {
+        id: taskId,
+        kind: "kill.predict",
+        status: "running",
+        created_at: new Date().toISOString(),
+        started_at: new Date().toISOString(),
+        finished_at: null,
+        request: params,
+        result: null,
+        error: null,
+        logs: [],
+        progress_events: [],
+      }
+      await window.mustudio.tasks.insertTask(task as unknown)
+      setTasks((prev) => [task, ...prev])
+      setSelectedTaskId(taskId)
+      setKillModalOpen(false)
+      setAddMenuOpen(false)
+
+      progressUnsubscribeRef.current = window.mustudio.tasks.onKillPredictProgress((ev) => {
+        if (ev.taskId !== taskId) return
+        setTasks((prev) =>
+          prev.map((t) => {
+            if (t.id !== taskId) return t
+            return {
+              ...t,
+              progress_events: [
+                ...t.progress_events,
+                {
+                  progress: ev.progress,
+                  message: ev.message,
+                  timestamp: new Date().toISOString(),
+                },
+              ],
+            }
+          })
+        )
+      })
+
+      try {
+        const result = await window.mustudio.tasks.runKillPredict({
+          taskId,
+          ...params,
+        })
+        progressUnsubscribeRef.current?.()
+        progressUnsubscribeRef.current = null
+        setTasks((prev) =>
+          prev.map((t) => {
+            if (t.id !== taskId) return t
+            return {
+              ...t,
+              status: result.ok ? "succeeded" : "failed",
+              finished_at: new Date().toISOString(),
+              error: result.ok ? null : result.error,
+              result: result.ok ? { output: result.output, rows: result.rows } : null,
             }
           })
         )
@@ -320,6 +498,26 @@ export default function TasksDashboardPage() {
                     >
                       Movie
                     </button>
+                    <button
+                      type="button"
+                      className="w-full text-left px-4 py-2 hover:bg-accent text-sm"
+                      onClick={() => {
+                        setExpressionModalOpen(true)
+                        setAddMenuOpen(false)
+                      }}
+                    >
+                      Expression
+                    </button>
+                    <button
+                      type="button"
+                      className="w-full text-left px-4 py-2 hover:bg-accent text-sm"
+                      onClick={() => {
+                        setKillModalOpen(true)
+                        setAddMenuOpen(false)
+                      }}
+                    >
+                      Kill
+                    </button>
                   </div>
                 )}
               </div>
@@ -348,8 +546,11 @@ export default function TasksDashboardPage() {
                             <span className="font-medium">{task.kind}</span>
                             {" — "}
                             <span className="text-muted-foreground text-sm">
-                              pos {String(task.request?.pos ?? "?")} →{" "}
-                              {String(task.request?.output ?? "?")}
+                              {task.kind === "expression.analyze"
+                                ? `pos ${String(task.request?.pos ?? "?")} ch${String(task.request?.channel ?? "?")} → ${String(task.request?.output ?? "?")}`
+                                : task.kind === "kill.predict"
+                                  ? `pos ${String(task.request?.pos ?? "?")} → ${String(task.request?.output ?? "?")}`
+                                  : `pos ${String(task.request?.pos ?? "?")} → ${String(task.request?.output ?? "?")}`}
                             </span>
                           </div>
                           <div className="flex items-center gap-2">
@@ -367,13 +568,43 @@ export default function TasksDashboardPage() {
                               {task.status}
                             </span>
                             {task.status === "succeeded" && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => navigate("/see")}
-                              >
-                                View in See
-                              </Button>
+                              <>
+                                {task.kind === "expression.analyze" ? (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      const r = task.result as { rows?: Array<{ t: number; crop: string; intensity: number; area: number; background: number }> } | null
+                                      navigate("/application", {
+                                        state: { expressionRows: r?.rows ?? null },
+                                      })
+                                    }}
+                                  >
+                                    View in Application
+                                  </Button>
+                                ) : task.kind === "kill.predict" ? (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      const r = task.result as { rows?: Array<{ t: number; crop: string; label: boolean }> } | null
+                                      navigate("/application", {
+                                        state: { killRows: r?.rows ?? null },
+                                      })
+                                    }}
+                                  >
+                                    View in Application
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => navigate("/see")}
+                                  >
+                                    View in See
+                                  </Button>
+                                )}
+                              </>
                             )}
                           </div>
                         </div>
@@ -427,6 +658,20 @@ export default function TasksDashboardPage() {
             onClose={() => setMovieModalOpen(false)}
             workspace={activeWorkspace}
             onCreate={handleCreateMovie}
+          />
+          <ExpressionTaskConfigModal
+            key={activeWorkspace.id}
+            open={expressionModalOpen}
+            onClose={() => setExpressionModalOpen(false)}
+            workspace={activeWorkspace}
+            onCreate={handleCreateExpressionAnalyze}
+          />
+          <KillTaskConfigModal
+            key={activeWorkspace.id}
+            open={killModalOpen}
+            onClose={() => setKillModalOpen(false)}
+            workspace={activeWorkspace}
+            onCreate={handleCreateKillPredict}
           />
         </>
       )}

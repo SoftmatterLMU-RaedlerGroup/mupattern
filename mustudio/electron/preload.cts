@@ -24,6 +24,10 @@ contextBridge.exposeInMainWorld("mustudio", {
   tasks: {
     pickCropsDestination: () =>
       ipcRenderer.invoke("tasks:pick-crops-destination") as Promise<{ path: string } | null>,
+    pickExpressionOutput: () =>
+      ipcRenderer.invoke("tasks:pick-expression-output") as Promise<{ path: string } | null>,
+    pickKillModel: () =>
+      ipcRenderer.invoke("tasks:pick-kill-model") as Promise<{ path: string } | null>,
     pickMovieOutput: () =>
       ipcRenderer.invoke("tasks:pick-movie-output") as Promise<{ path: string } | null>,
     pickSpotsFile: () =>
@@ -42,6 +46,31 @@ contextBridge.exposeInMainWorld("mustudio", {
       const fn = (_event: Electron.IpcRendererEvent, ev: { taskId: string; progress: number; message: string }) => callback(ev)
       ipcRenderer.on("tasks:crop-progress", fn)
       return () => ipcRenderer.removeListener("tasks:crop-progress", fn)
+    },
+    runExpressionAnalyze: (payload: {
+      taskId: string
+      workspacePath: string
+      pos: number
+      channel: number
+      output: string
+    }) => ipcRenderer.invoke("tasks:run-expression-analyze", payload),
+    onExpressionAnalyzeProgress: (callback: (ev: { taskId: string; progress: number; message: string }) => void) => {
+      const fn = (_event: Electron.IpcRendererEvent, ev: { taskId: string; progress: number; message: string }) => callback(ev)
+      ipcRenderer.on("tasks:expression-analyze-progress", fn)
+      return () => ipcRenderer.removeListener("tasks:expression-analyze-progress", fn)
+    },
+    runKillPredict: (payload: {
+      taskId: string
+      workspacePath: string
+      pos: number
+      modelPath: string
+      output: string
+      batchSize?: number
+    }) => ipcRenderer.invoke("tasks:run-kill-predict", payload),
+    onKillPredictProgress: (callback: (ev: { taskId: string; progress: number; message: string }) => void) => {
+      const fn = (_event: Electron.IpcRendererEvent, ev: { taskId: string; progress: number; message: string }) => callback(ev)
+      ipcRenderer.on("tasks:kill-predict-progress", fn)
+      return () => ipcRenderer.removeListener("tasks:kill-predict-progress", fn)
     },
     runMovie: (payload: {
       taskId: string
