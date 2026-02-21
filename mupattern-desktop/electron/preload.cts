@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld("mupatternDesktop", {
   },
   workspace: {
     pickDirectory: () => ipcRenderer.invoke("workspace:pick-directory"),
+    pathExists: (dirPath: string) =>
+      ipcRenderer.invoke("workspace:path-exists", { path: dirPath }) as Promise<boolean>,
     rescanDirectory: (path: string) =>
       ipcRenderer.invoke("workspace:rescan-directory", { path }) as Promise<{
         path: string;

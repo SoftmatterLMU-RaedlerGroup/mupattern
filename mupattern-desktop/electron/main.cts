@@ -1087,6 +1087,15 @@ function registerWorkspaceStateIpc(): void {
     return pickWorkspaceDirectory();
   });
 
+  ipcMain.handle("workspace:path-exists", async (_event, payload: { path: string }): Promise<boolean> => {
+    try {
+      await access(payload.path, constants.R_OK);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+
   ipcMain.handle(
     "workspace:rescan-directory",
     async (_event, payload: { path: string }): Promise<WorkspaceScanResult | null> => {

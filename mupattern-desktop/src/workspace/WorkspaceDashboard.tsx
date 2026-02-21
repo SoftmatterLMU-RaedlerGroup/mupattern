@@ -41,6 +41,9 @@ export default function WorkspaceDashboard() {
     null,
   );
   const [positionsWithBbox, setPositionsWithBbox] = useState<number[]>([]);
+  const [pathExistsByWorkspaceId, setPathExistsByWorkspaceId] = useState<
+    Record<string, boolean>
+  >({});
 
   const handleAddWorkspace = useCallback(async () => {
     setError(null);
@@ -216,6 +219,33 @@ export default function WorkspaceDashboard() {
     };
     void check();
   }, [activeWorkspace]);
+
+  useEffect(() => {
+    if (workspaces.length === 0) {
+      setPathExistsByWorkspaceId({});
+      return;
+    }
+    let cancelled = false;
+    const check = async () => {
+      const results = await Promise.all(
+        workspaces.map((ws) =>
+          ws.rootPath
+            ? window.mupatternDesktop.workspace.pathExists(ws.rootPath)
+            : Promise.resolve(false),
+        ),
+      );
+      if (cancelled) return;
+      const next: Record<string, boolean> = {};
+      workspaces.forEach((ws, i) => {
+        next[ws.id] = results[i] ?? false;
+      });
+      setPathExistsByWorkspaceId(next);
+    };
+    void check();
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaces]);
 
   useEffect(() => {
     if (!contextMenu) return;
@@ -475,27 +505,40 @@ export default function WorkspaceDashboard() {
               </p>
             ) : (
               <div className="grid gap-4 sm:grid-cols-2">
-                {workspaces.map((ws) => (
-                  <div key={ws.id} className="border rounded-lg p-4 flex flex-col gap-3">
-                    <p className="font-medium">{ws.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {ws.positions.length} position{ws.positions.length !== 1 ? "s" : ""}
-                    </p>
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="outline" onClick={() => handleOpen(ws)}>
-                        Open
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => removeWorkspace(ws.id)}
-                      >
-                        Remove
-                      </Button>
+                {workspaces.map((ws) => {
+                  const pathExists = pathExistsByWorkspaceId[ws.id] ?? true;
+                  return (
+                    <div key={ws.id} className="border rounded-lg p-4 flex flex-col gap-3">
+                      <p className="font-medium">{ws.name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {ws.positions.length} position{ws.positions.length !== 1 ? "s" : ""}
+                      </p>
+                      {!pathExists && (
+                        <p className="text-sm text-destructive">
+                          Path no longer exists. Remove this workspace.
+                        </p>
+                      )}
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleOpen(ws)}
+                          disabled={!pathExists}
+                        >
+                          Open
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => removeWorkspace(ws.id)}
+                        >
+                          Remove
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </>

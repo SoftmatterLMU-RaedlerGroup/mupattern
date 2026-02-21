@@ -138,6 +138,7 @@ declare global {
       };
       workspace: {
         pickDirectory: () => Promise<WorkspacePickResult | null>;
+        pathExists: (path: string) => Promise<boolean>;
         rescanDirectory: (path: string) => Promise<WorkspacePickResult | null>;
         pickTagsFile: () => Promise<string | null>;
         readPositionImage: (
