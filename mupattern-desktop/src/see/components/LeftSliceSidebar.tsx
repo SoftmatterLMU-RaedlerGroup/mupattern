@@ -1,8 +1,7 @@
 import { useCallback, useMemo } from "react"
 import { useStore } from "@tanstack/react-store"
-import { useNavigate } from "react-router-dom"
 import { Button } from "@mupattern/shared"
-import { ChevronLeft, ChevronRight, Home } from "lucide-react"
+import { ChevronLeft, ChevronRight } from "lucide-react"
 import {
   workspaceStore,
   getWorkspaceVisiblePositionIndices,
@@ -13,7 +12,6 @@ import {
 import { setC as persistC, setZ as persistZ } from "@/see/store"
 
 export function LeftSliceSidebar() {
-  const navigate = useNavigate()
   const activeWorkspace = useStore(workspaceStore, (s) => {
     const { activeId, workspaces } = s
     if (!activeId) return null
@@ -92,17 +90,6 @@ export function LeftSliceSidebar() {
 
   return (
     <aside className="w-64 flex-shrink-0 overflow-y-auto border-r border-border p-4 space-y-4">
-      <Button
-        variant="outline"
-        size="sm"
-        className="w-full justify-start"
-        onClick={() => navigate("/workspace")}
-        title="Back to workspace"
-      >
-        <Home className="size-4" />
-        Workspaces
-      </Button>
-
       <div>
         <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">Viewer Slice</h2>
         <p className="text-xs text-muted-foreground mt-1">

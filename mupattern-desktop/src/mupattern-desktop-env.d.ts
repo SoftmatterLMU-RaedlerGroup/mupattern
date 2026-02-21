@@ -153,7 +153,7 @@ declare global {
       }
       tasks: {
         pickCropsDestination: () => Promise<{ path: string } | null>
-        pickExpressionOutput: () => Promise<{ path: string } | null>
+        pickExpressionOutput: (suggestedPath?: string) => Promise<{ path: string } | null>
         pickKillModel: () => Promise<{ path: string } | null>
         pickMovieOutput: () => Promise<{ path: string } | null>
         pickSpotsFile: () => Promise<{ path: string } | null>
@@ -200,6 +200,15 @@ declare global {
         insertTask: (task: unknown) => Promise<boolean>
         updateTask: (id: string, updates: unknown) => Promise<boolean>
         listTasks: () => Promise<unknown[]>
+      }
+      application: {
+        listExpressionCsv: (workspacePath: string) => Promise<
+          Array<{ posId: string; path: string }>
+        >
+        loadExpressionCsv: (path: string) => Promise<
+          | { ok: true; rows: Array<{ t: number; crop: string; intensity: number; area: number; background: number }> }
+          | { ok: false; error: string }
+        >
       }
     }
   }

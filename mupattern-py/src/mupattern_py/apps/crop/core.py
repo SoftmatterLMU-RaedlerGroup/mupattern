@@ -1,4 +1,4 @@
-"""mufile core – shared logic for crop, convert, movie. Used by CLI and GUI."""
+"""Crop core – crop TIFFs to zarr, movie from zarr."""
 
 from __future__ import annotations
 
@@ -84,18 +84,13 @@ def run_crop(
     sample = tifffile.imread(next(iter(index.values())))
     dtype = sample.dtype
 
-    store = zarr.DirectoryStore(str(output))
-    root = zarr.open_group(store, mode="a")
+    root = zarr.open_group(str(output), mode="a", zarr_format=3)
     crop_grp = root.require_group(f"pos/{pos:03d}/crop")
-
-    n_crops = len(bboxes)
-    if on_progress:
-        on_progress(0.0, f"Cropping {n_crops} crops ...")
 
     arrays: list[zarr.Array] = []
     for i, bb in enumerate(bboxes):
         arr = crop_grp.zeros(
-            f"{i:03d}",
+            name=f"{i:03d}",
             shape=(n_times, n_channels, n_z, bb["h"], bb["w"]),
             chunks=(1, 1, 1, bb["h"], bb["w"]),
             dtype=dtype,
@@ -113,7 +108,7 @@ def run_crop(
             mask[y : y + h, x : x + w] = True
 
         bg_arr = root.zeros(
-            f"pos/{pos:03d}/background",
+            name=f"pos/{pos:03d}/background",
             shape=(n_times, n_channels, n_z),
             chunks=(1, 1, 1),
             dtype=np.float64,
@@ -139,75 +134,6 @@ def run_crop(
         on_progress(1.0, f"Wrote {output}")
 
 
-def run_convert(
-    input_nd2: Path,
-    pos_slice: str,
-    time_slice: str,
-    output: Path,
-    *,
-    on_progress: ProgressCallback | None = None,
-) -> None:
-    """Convert an ND2 file into per-position TIFF folders."""
-    import nd2
-
-    f = nd2.ND2File(str(input_nd2))
-    sizes = f.sizes
-    n_pos = sizes.get("P", 1)
-    n_time = sizes.get("T", 1)
-    n_chan = sizes.get("C", 1)
-    n_z = sizes.get("Z", 1)
-
-    dim_order = [d for d in sizes.keys() if d not in ("Y", "X")]
-    dask_arr = f.to_dask()
-
-    pos_indices = parse_slice_string(pos_slice, n_pos)
-    time_indices = parse_slice_string(time_slice, n_time)
-
-    total = len(pos_indices) * len(time_indices) * n_chan * n_z
-    if on_progress:
-        on_progress(
-            0.0,
-            f"Selected {len(pos_indices)} positions, {len(time_indices)} timepoints, "
-            f"{n_chan} channels, {n_z} z-slices. Total frames: {total}",
-        )
-
-    output.mkdir(parents=True, exist_ok=True)
-
-    done = 0
-    for p_idx in pos_indices:
-        pos_dir = output / f"Pos{p_idx}"
-        pos_dir.mkdir(exist_ok=True)
-
-        with open(pos_dir / "time_map.csv", "w", newline="") as fh:
-            writer = csv.writer(fh)
-            writer.writerow(["t", "t_real"])
-            for t_new, t_orig in enumerate(time_indices):
-                writer.writerow([t_new, t_orig])
-
-        for t_new, t_orig in enumerate(time_indices):
-            for c in range(n_chan):
-                for z in range(n_z):
-                    coords = {"P": p_idx, "T": t_orig, "C": c, "Z": z}
-                    idx = tuple(coords.get(d, 0) for d in dim_order)
-                    frame = dask_arr[idx].compute()
-
-                    fname = (
-                        f"img_channel{c:03d}"
-                        f"_position{p_idx:03d}"
-                        f"_time{t_new:09d}"
-                        f"_z{z:03d}.tif"
-                    )
-                    tifffile.imwrite(str(pos_dir / fname), frame)
-                    done += 1
-
-                    if on_progress and total > 0:
-                        on_progress(done / total, f"Writing TIFFs {done}/{total}")
-
-    f.close()
-    if on_progress:
-        on_progress(1.0, f"Wrote {output}")
-
-
 def run_movie(
     input_zarr: Path,
     pos: int,
@@ -222,11 +148,12 @@ def run_movie(
     on_progress: ProgressCallback | None = None,
 ) -> None:
     """Create a movie from a zarr crop."""
+    import csv
+
     import imageio
     import matplotlib.cm as cm
 
-    store = zarr.DirectoryStore(str(input_zarr))
-    root = zarr.open_group(store, mode="r")
+    root = zarr.open_group(str(input_zarr), mode="r", zarr_format=3)
     crop_grp = root[f"pos/{pos:03d}/crop"]
     crop_id = f"{crop_idx:03d}"
 

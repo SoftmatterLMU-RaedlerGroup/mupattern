@@ -138,12 +138,6 @@ interface HasMasksResponse {
   hasMasks: boolean
 }
 
-interface ExpressionAnalyzeRequest {
-  workspacePath: string
-  pos: number
-  channel: number
-}
-
 interface ExpressionAnalyzeRow {
   t: number
   crop: string
@@ -151,18 +145,6 @@ interface ExpressionAnalyzeRow {
   area: number
   background: number
 }
-
-interface ExpressionAnalyzeSuccess {
-  ok: true
-  rows: ExpressionAnalyzeRow[]
-}
-
-interface ExpressionAnalyzeFailure {
-  ok: false
-  error: string
-}
-
-type ExpressionAnalyzeResponse = ExpressionAnalyzeSuccess | ExpressionAnalyzeFailure
 
 interface RunExpressionAnalyzeRequest {
   taskId: string
@@ -511,7 +493,7 @@ async function getCachedMasksArray(
   let promise = context.arrays.get(key)
   if (!promise) {
     const { zarr } = await getZarrDeps()
-    promise = zarr.open(context.root.resolve(`pos/${posId}/crop/${cropId}`), { kind: "array" })
+    promise = zarr.open.v3(context.root.resolve(`pos/${posId}/crop/${cropId}`), { kind: "array" })
     promise.catch(() => {
       const current = context.arrays.get(key)
       if (current === promise) context.arrays.delete(key)
@@ -531,7 +513,7 @@ async function getCachedZarrArray(
   let promise = context.arrays.get(key)
   if (!promise) {
     const { zarr } = await getZarrDeps()
-    promise = zarr.open(context.root.resolve(`pos/${posId}/crop/${cropId}`), { kind: "array" })
+    promise = zarr.open.v3(context.root.resolve(`pos/${posId}/crop/${cropId}`), { kind: "array" })
     promise.catch(() => {
       const current = context.arrays.get(key)
       if (current === promise) context.arrays.delete(key)
@@ -541,10 +523,14 @@ async function getCachedZarrArray(
   return promise
 }
 
-async function readShapeFromZarrayFile(cropPath: string): Promise<number[] | null> {
+/** Read shape from Zarr v3 array metadata. Only accepts v3 format (zarr.json). */
+async function readShapeFromV3ArrayMeta(cropPath: string): Promise<number[] | null> {
   try {
-    const text = await readFile(path.join(cropPath, ".zarray"), "utf8")
-    const parsed = JSON.parse(text) as { shape?: unknown }
+    // cropPath = .../crops.zarr/pos/{posId}/crop/{cropId}; v3 metadata is colocated at zarr.json
+    const metaPath = path.join(cropPath, "zarr.json")
+    const text = await readFile(metaPath, "utf8")
+    const parsed = JSON.parse(text) as { zarr_format?: number; node_type?: string; shape?: unknown }
+    if (parsed.zarr_format !== 3 || parsed.node_type !== "array") return null
     if (!Array.isArray(parsed.shape)) return null
     const shape = parsed.shape.filter((value): value is number => typeof value === "number")
     return shape.length >= 5 ? shape : null
@@ -625,7 +611,7 @@ async function discoverZarr({
     response.positions.push(posId)
     const infos: Array<{ posId: string; cropId: string; shape: number[] }> = []
     if (metadataMode === "fast") {
-      const firstShape = (await readShapeFromZarrayFile(path.join(cropRoot, cropIds[0]))) ?? [1, 1, 1, 1, 1]
+      const firstShape = (await readShapeFromV3ArrayMeta(path.join(cropRoot, cropIds[0]))) ?? [1, 1, 1, 1, 1]
       for (const cropId of cropIds) {
         infos.push({ posId, cropId, shape: firstShape })
       }
@@ -1102,11 +1088,11 @@ function registerWorkspaceStateIpc(): void {
 
   ipcMain.handle(
     "tasks:pick-expression-output",
-    async (): Promise<{ path: string } | null> => {
+    async (_event, suggestedPath?: string): Promise<{ path: string } | null> => {
       const result = await dialog.showSaveDialog({
         title: "Save expression CSV",
         filters: [{ name: "CSV", extensions: ["csv"] }],
-        defaultPath: "expression.csv",
+        defaultPath: suggestedPath ?? "expression.csv",
       })
       if (result.canceled || !result.filePath) return null
       return { path: result.filePath }
@@ -1147,6 +1133,44 @@ function registerWorkspaceStateIpc(): void {
         return true
       } catch {
         return false
+      }
+    }
+  )
+
+  const EXPRESSION_CSV_RE = /^Pos(\d+)_expression\.csv$/i
+  ipcMain.handle(
+    "application:list-expression-csv",
+    async (
+      _event,
+      workspacePath: string
+    ): Promise<Array<{ posId: string; path: string }>> => {
+      try {
+        const entries = await readdir(workspacePath, { withFileTypes: true })
+        const out: Array<{ posId: string; path: string }> = []
+        for (const e of entries) {
+          if (!e.isFile()) continue
+          const m = e.name.match(EXPRESSION_CSV_RE)
+          if (m) out.push({ posId: m[1], path: path.join(workspacePath, e.name) })
+        }
+        out.sort((a, b) => a.posId.localeCompare(b.posId, undefined, { numeric: true }))
+        return out
+      } catch {
+        return []
+      }
+    }
+  )
+
+  ipcMain.handle(
+    "application:load-expression-csv",
+    async (
+      _event,
+      csvPath: string
+    ): Promise<{ ok: true; rows: ExpressionAnalyzeRow[] } | { ok: false; error: string }> => {
+      try {
+        const rows = await parseExpressionCsv(csvPath)
+        return { ok: true, rows }
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) }
       }
     }
   )

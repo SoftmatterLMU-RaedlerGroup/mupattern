@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useMemo } from "react"
 import { useNavigate } from "react-router-dom"
 import {
   LineChart,
@@ -8,11 +8,12 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  Legend,
 } from "recharts"
 import { Button } from "@mupattern/shared"
 import type { Workspace } from "@/workspace/store"
 
-interface ExpressionRow {
+export interface ExpressionRow {
   t: number
   crop: string
   intensity: number
@@ -23,46 +24,13 @@ interface ExpressionRow {
 /** Gray at 30% opacity for bulk time-series display (no per-series legend) */
 const BULK_LINE_STROKE = "rgba(128, 128, 128, 0.3)"
 
-interface ExpressionTask {
-  id: string
-  kind: string
-  status: string
-  request: { pos?: number; channel?: number; output?: string }
-  result: { output: string; rows: ExpressionRow[] } | null
-}
-
 interface ExpressionTabProps {
   workspace: Workspace
-  initialRows?: ExpressionRow[] | null
+  rows: ExpressionRow[] | null
 }
 
-export function ExpressionTab({ workspace: _workspace, initialRows }: ExpressionTabProps) {
+export function ExpressionTab({ workspace: _workspace, rows }: ExpressionTabProps) {
   const navigate = useNavigate()
-  const [rows, setRows] = useState<ExpressionRow[] | null>(initialRows ?? null)
-  const [tasks, setTasks] = useState<ExpressionTask[]>([])
-  const [loadingTasks, setLoadingTasks] = useState(false)
-
-  useEffect(() => {
-    if (initialRows && initialRows.length > 0) setRows(initialRows)
-  }, [initialRows])
-
-  useEffect(() => {
-    let cancelled = false
-    setLoadingTasks(true)
-    window.mupatternDesktop.tasks
-      .listTasks()
-      .then((list) => {
-        if (cancelled) return
-        const expr = (list as unknown as ExpressionTask[]).filter(
-          (t) => t.kind === "expression.analyze" && t.status === "succeeded" && t.result?.rows?.length
-        )
-        setTasks(expr)
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingTasks(false)
-      })
-    return () => { cancelled = true }
-  }, [])
 
   const crops = rows
     ? [...new Set(rows.map((r) => r.crop))].sort()
@@ -85,35 +53,32 @@ export function ExpressionTab({ workspace: _workspace, initialRows }: Expression
 
   const intensityAboveBgData = pivotByT((r) => r.intensity - r.area * r.background)
 
+  const dataWithMedian = useMemo(() => {
+    if (!intensityAboveBgData.length || crops.length === 0) return intensityAboveBgData
+    return intensityAboveBgData.map((row) => {
+      const values = crops.map((c) => row[c] as number).filter((v) => typeof v === "number" && !Number.isNaN(v))
+      const median =
+        values.length === 0
+          ? NaN
+          : (() => {
+              const sorted = [...values].sort((a, b) => a - b)
+              const m = Math.floor(sorted.length / 2)
+              return sorted.length % 2 ? sorted[m] : (sorted[m - 1] + sorted[m]) / 2
+            })()
+      return { ...row, median }
+    })
+  }, [intensityAboveBgData, crops])
+
   return (
     <div className="space-y-6">
       {!rows || rows.length === 0 ? (
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Add an Expression analyze task from the Tasks page, run it, then click &quot;View in Application&quot; — or pick a completed task below.
+            Select a position from the left sidebar to view expression data, or run an Expression analyze task from the Tasks page.
           </p>
           <Button variant="outline" size="sm" onClick={() => navigate("/tasks")}>
             Go to Tasks
           </Button>
-          {loadingTasks ? (
-            <p className="text-sm text-muted-foreground">Loading tasks…</p>
-          ) : tasks.length > 0 ? (
-            <div className="space-y-2">
-              <p className="text-sm font-medium">Completed expression tasks</p>
-              <div className="flex flex-wrap gap-2">
-                {tasks.map((t) => (
-                  <Button
-                    key={t.id}
-                    variant="outline"
-                    size="sm"
-                    onClick={() => t.result?.rows && setRows(t.result.rows)}
-                  >
-                    pos {t.request?.pos ?? "?"} ch{t.request?.channel ?? "?"} ({t.result?.rows?.length ?? 0} rows)
-                  </Button>
-                ))}
-              </div>
-            </div>
-          ) : null}
         </div>
       ) : null}
 
@@ -121,22 +86,35 @@ export function ExpressionTab({ workspace: _workspace, initialRows }: Expression
         <div className="space-y-8">
           <div className="flex justify-between items-center">
             <span className="text-sm text-muted-foreground">
-              {rows.length} rows from expression analyze
+              {crops.length} trace{crops.length !== 1 ? "s" : ""}
             </span>
-            <Button variant="ghost" size="sm" onClick={() => setRows(null)}>
-              Choose different task
-            </Button>
           </div>
           <div>
             <h3 className="text-sm font-medium mb-2">
               Background-corrected total fluor per crop
             </h3>
-            <div className="h-64 [&_*]:pointer-events-none">
+            <div className="h-[32rem] flex [&_*]:pointer-events-none">
+              <div
+                className="flex items-center justify-center pr-1 shrink-0 text-sm text-muted-foreground"
+                style={{ writingMode: "vertical-rl", textOrientation: "mixed" }}
+              >
+                fluorescence
+              </div>
+              <div className="flex-1 min-w-0">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={intensityAboveBgData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
+                <LineChart data={dataWithMedian} margin={{ top: 5, right: 5, left: 5, bottom: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="t" tick={{ fontSize: 12 }} domain={["dataMin", "dataMax"]} />
-                  <YAxis tick={{ fontSize: 12 }} domain={["dataMin", "dataMax"]} />
+                  <XAxis
+                    dataKey="t"
+                    tick={{ fontSize: 12 }}
+                    domain={["dataMin", "dataMax"]}
+                    label={{ value: "frame", position: "bottom", offset: -5 }}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 12 }}
+                    tickFormatter={(v) => Number(v).toExponential(1)}
+                    domain={["dataMin", "dataMax"]}
+                  />
                   <Tooltip cursor={false} content={() => null} />
                   {crops.map((crop) => (
                     <Line
@@ -148,10 +126,23 @@ export function ExpressionTab({ workspace: _workspace, initialRows }: Expression
                       dot={false}
                       connectNulls
                       isAnimationActive={false}
+                      legendType="none"
                     />
                   ))}
+                  <Line
+                    type="monotone"
+                    dataKey="median"
+                    name="median"
+                    stroke="red"
+                    strokeWidth={2}
+                    dot={false}
+                    connectNulls
+                    isAnimationActive={false}
+                  />
+                  <Legend align="left" verticalAlign="top" />
                 </LineChart>
               </ResponsiveContainer>
+              </div>
             </div>
           </div>
         </div>

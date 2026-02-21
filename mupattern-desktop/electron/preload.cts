@@ -24,8 +24,8 @@ contextBridge.exposeInMainWorld("mupatternDesktop", {
   tasks: {
     pickCropsDestination: () =>
       ipcRenderer.invoke("tasks:pick-crops-destination") as Promise<{ path: string } | null>,
-    pickExpressionOutput: () =>
-      ipcRenderer.invoke("tasks:pick-expression-output") as Promise<{ path: string } | null>,
+    pickExpressionOutput: (suggestedPath?: string) =>
+      ipcRenderer.invoke("tasks:pick-expression-output", suggestedPath) as Promise<{ path: string } | null>,
     pickKillModel: () =>
       ipcRenderer.invoke("tasks:pick-kill-model") as Promise<{ path: string } | null>,
     pickMovieOutput: () =>
@@ -92,5 +92,16 @@ contextBridge.exposeInMainWorld("mupatternDesktop", {
     insertTask: (task: unknown) => ipcRenderer.invoke("tasks:insert-task", task),
     updateTask: (id: string, updates: unknown) => ipcRenderer.invoke("tasks:update-task", id, updates),
     listTasks: () => ipcRenderer.invoke("tasks:list-tasks"),
+  },
+  application: {
+    listExpressionCsv: (workspacePath: string) =>
+      ipcRenderer.invoke("application:list-expression-csv", workspacePath) as Promise<
+        Array<{ posId: string; path: string }>
+      >,
+    loadExpressionCsv: (path: string) =>
+      ipcRenderer.invoke("application:load-expression-csv", path) as Promise<
+        | { ok: true; rows: Array<{ t: number; crop: string; intensity: number; area: number; background: number }> }
+        | { ok: false; error: string }
+      >,
   },
 })

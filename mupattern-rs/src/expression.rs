@@ -55,7 +55,7 @@ pub fn run(
 
     let store = zarr::open_store(&crops_zarr)?;
 
-    let bg_path = format!("pos/{}/background", pos_id);
+    let bg_path = format!("/pos/{}/background", pos_id);
     let mut backgrounds: Vec<f64> = Vec::new();
     if let Ok(bg_arr) = zarr::open_array(&store, &bg_path) {
         let shape = bg_arr.shape();
@@ -76,7 +76,7 @@ pub fn run(
     let mut rows: Vec<String> = vec!["t,crop,intensity,area,background".to_string()];
 
     for (i, crop_id) in crop_ids.iter().enumerate() {
-        let array_path = format!("pos/{}/crop/{}", pos_id, crop_id);
+        let array_path = format!("/pos/{}/crop/{}", pos_id, crop_id);
         let arr = zarr::open_array(&store, &array_path)?;
         let shape = arr.shape();
         let n_t = shape[0];

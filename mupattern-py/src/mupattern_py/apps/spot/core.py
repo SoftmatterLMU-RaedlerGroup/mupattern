@@ -1,4 +1,4 @@
-"""muspot core – shared logic for detect and plot. Used by CLI and GUI."""
+"""Spot core – shared logic for detect and plot."""
 
 from __future__ import annotations
 
@@ -6,8 +6,8 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import zarr
 
+from ...common.io_zarr import open_zarr_group
 from ...common.slices import parse_slice_string
 from ...common.progress import ProgressCallback
 
@@ -27,8 +27,7 @@ def run_detect(
 
     sf_model = Spotiflow.from_pretrained(model)
 
-    store = zarr.DirectoryStore(str(zarr_path))
-    root = zarr.open_group(store, mode="r")
+    root = open_zarr_group(zarr_path, mode="r")
     crop_grp = root[f"pos/{pos:03d}/crop"]
     all_crop_ids = sorted(crop_grp.keys())
     crop_indices = parse_slice_string(crop_slice, len(all_crop_ids))
@@ -69,7 +68,6 @@ def run_plot(input_csv: Path, output: Path) -> None:
 
     df = pd.read_csv(input_csv, dtype={"crop": str})
     counts = df.groupby(["t", "crop"]).size().reset_index(name="count")
-    n_crops = counts["crop"].nunique()
     max_t = counts["t"].max()
 
     fig, ax = plt.subplots(figsize=(6, 4))

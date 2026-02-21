@@ -3,7 +3,6 @@ mod expression;
 mod movie;
 mod slices;
 mod zarr;
-mod zarr_v2;
 
 use clap::{Parser, Subcommand};
 use std::io::{self, Write};

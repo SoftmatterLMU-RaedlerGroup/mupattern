@@ -5,6 +5,6 @@ from pathlib import Path
 import zarr
 
 
-def open_zarr_group(path: Path, mode: str = "r") -> zarr.Group:
-    store = zarr.DirectoryStore(str(path))
-    return zarr.open_group(store, mode=mode)
+def open_zarr_group(path: Path | str, mode: str = "r") -> zarr.Group:
+    """Open Zarr group. Only accepts Zarr v3 format."""
+    return zarr.open_group(str(path), mode=mode, zarr_format=3)

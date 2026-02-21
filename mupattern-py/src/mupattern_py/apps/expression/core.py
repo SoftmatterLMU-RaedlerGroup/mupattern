@@ -1,4 +1,4 @@
-"""muexpression core – shared logic for analyze and plot. Used by CLI and GUI."""
+"""Expression core – shared logic for analyze and plot."""
 
 from __future__ import annotations
 
@@ -6,8 +6,8 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import zarr
 
+from ...common.io_zarr import open_zarr_group
 from ...common.progress import ProgressCallback
 
 
@@ -20,8 +20,7 @@ def run_analyze(
     on_progress: ProgressCallback | None = None,
 ) -> None:
     """Sum pixel intensities per crop per timepoint and write a CSV."""
-    store = zarr.DirectoryStore(str(zarr_path))
-    root = zarr.open_group(store, mode="r")
+    root = open_zarr_group(zarr_path, mode="r")
     crop_grp = root[f"pos/{pos:03d}/crop"]
     crop_ids = sorted(crop_grp.keys())
 
@@ -53,7 +52,7 @@ def run_analyze(
 
 
 def run_plot(input_csv: Path, output_dir: Path) -> None:
-    """Plot raw intensity, background-corrected total fluor, and max-normalized corrected per crop over time. Writes three square plots into output_dir: intensity.png, background_corrected_total_fluor.png, normalized_corrected.png (same style as tissue plot)."""
+    """Plot raw intensity, background-corrected total fluor, and max-normalized corrected per crop over time."""
     import matplotlib
 
     matplotlib.use("Agg")

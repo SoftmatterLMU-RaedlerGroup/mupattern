@@ -39,7 +39,7 @@ pub fn run(
     let pos_id = format!("{:03}", args.pos);
 
     let store = zarr::open_store(zarr_path)?;
-    let array_path = format!("pos/{}/crop/{}", pos_id, crop_id);
+    let array_path = format!("/pos/{}/crop/{}", pos_id, crop_id);
     let arr = zarr::open_array(&store, &array_path)?;
     let shape = arr.shape();
     let n_t = shape[0];
@@ -99,8 +99,6 @@ pub fn run(
         frames_rgb.push(rgb);
     }
 
-    let out_w = w;
-    let out_h = h;
     let pad_h = (16 - (h % 16)) % 16;
     let pad_w = (16 - (w % 16)) % 16;
     let (out_w, out_h) = if pad_h > 0 || pad_w > 0 {

@@ -1,10 +1,4 @@
-"""muapplication spot – detect fluorescent spots in micropattern crops using spotiflow.
-
-Commands:
-    muspot detect --zarr crops.zarr --pos 9 --channel 2 --output spots.csv
-    muspot detect --zarr crops.zarr --pos 9 --channel 2 --crop "0:10" --output spots.csv
-    muspot plot --input spots.csv --output spots.png
-"""
+"""mupattern spot – detect fluorescent spots in micropattern crops using spotiflow."""
 
 from __future__ import annotations
 
@@ -13,20 +7,14 @@ from typing import Annotated
 
 import typer
 
-from ..apps.spot.core import run_detect, run_plot
-
-app = typer.Typer(
-    add_completion=False,
-    help="Detect fluorescent spots in micropattern crops using spotiflow.",
-)
+from ..apps.spot.core import run_detect
 
 
 def _progress_echo(progress: float, message: str) -> None:
     typer.echo(message)
 
 
-@app.command()
-def detect(
+def spot(
     zarr_path: Annotated[
         Path,
         typer.Option("--zarr", help="Path to zarr store."),
@@ -71,29 +59,3 @@ def detect(
     except ValueError as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=1) from e
-
-
-@app.command()
-def plot(
-    input: Annotated[
-        Path,
-        typer.Option(
-            "--input",
-            exists=True,
-            dir_okay=False,
-            help="CSV from 'muspot detect' (t,crop,spot,y,x).",
-        ),
-    ],
-    output: Annotated[
-        Path,
-        typer.Option(help="Output plot image path (e.g. spots.png)."),
-    ],
-) -> None:
-    """Plot spot count over time for every crop."""
-    typer.echo(f"Loaded {input}")
-    run_plot(input, output)
-    typer.echo(f"Saved plot to {output}")
-
-
-def main() -> None:
-    app()

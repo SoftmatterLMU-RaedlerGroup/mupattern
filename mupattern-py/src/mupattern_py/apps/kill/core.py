@@ -1,4 +1,4 @@
-"""mukill core – shared logic for dataset, train, predict, plot, clean. Used by CLI and GUI."""
+"""Kill core – shared logic for dataset, train, predict, clean, plot."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ import pandas as pd
 import zarr
 from PIL import Image as PILImage
 
+from ...common.io_zarr import open_zarr_group
 from ...common.progress import ProgressCallback
 
 
@@ -88,8 +89,7 @@ def run_dataset(
 
     ann_dict = _load_annotations(annotations_path)
 
-    store = zarr.DirectoryStore(str(zarr_path))
-    root = zarr.open_group(store, mode="r")
+    root = open_zarr_group(zarr_path, mode="r")
     crop_grp = root[f"pos/{pos:03d}/crop"]
     crop_ids = sorted(crop_grp.keys())
 
@@ -261,8 +261,7 @@ def _predict_position(
     """Run inference on (crop, t) pairs for a position."""
     import torch
 
-    store = zarr.DirectoryStore(str(zarr_path))
-    root = zarr.open_group(store, mode="r")
+    root = open_zarr_group(zarr_path, mode="r")
     crop_grp = root[f"pos/{pos:03d}/crop"]
     crop_ids = sorted(crop_grp.keys())
 
@@ -387,6 +386,14 @@ def run_export_onnx(model_path: str, output_path: Path) -> None:
     model.save_pretrained(str(output_path))
 
 
+def run_clean(input_csv: Path, output: Path) -> None:
+    """Clean predictions by enforcing monotonicity."""
+    df = _load_csv(input_csv)
+    cleaned, report = _clean_df(df)
+    cleaned["label"] = cleaned["label"].apply(lambda x: "true" if x else "false")
+    cleaned.to_csv(output, index=False)
+
+
 def run_plot(input_csv: Path, output: Path) -> None:
     """Plot kill curve: number of present cells over time."""
     import matplotlib
@@ -395,20 +402,16 @@ def run_plot(input_csv: Path, output: Path) -> None:
     import matplotlib.pyplot as plt
 
     df = _load_csv(input_csv)
-    n_crops = df["crop"].nunique()
     max_t = df["t"].max()
     n_present = df.groupby("t")["label"].sum().sort_index()
 
     death_times = []
-    empty_at_t0 = 0
     for crop_id, group in df.groupby("crop"):
         group = group.sort_values("t")
         first_false = group.loc[~group["label"], "t"]
         if len(first_false) > 0:
             t_death = first_false.iloc[0]
-            if t_death == 0:
-                empty_at_t0 += 1
-            else:
+            if t_death > 0:
                 death_times.append(t_death)
 
     fig, (ax_curve, ax_hist) = plt.subplots(
@@ -433,11 +436,3 @@ def run_plot(input_csv: Path, output: Path) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(output, dpi=150, bbox_inches="tight")
     plt.close()
-
-
-def run_clean(input_csv: Path, output: Path) -> None:
-    """Clean predictions by enforcing monotonicity."""
-    df = _load_csv(input_csv)
-    cleaned, report = _clean_df(df)
-    cleaned["label"] = cleaned["label"].apply(lambda x: "true" if x else "false")
-    cleaned.to_csv(output, index=False)

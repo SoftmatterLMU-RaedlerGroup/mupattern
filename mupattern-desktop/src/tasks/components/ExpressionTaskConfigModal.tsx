@@ -29,15 +29,16 @@ export function ExpressionTaskConfigModal({
   onCreate,
 }: ExpressionTaskConfigModalProps) {
   const rootPath = workspace.rootPath ?? ""
-  const defaultOutput = rootPath
-    ? `${rootPath.replace(/\/$/, "")}/expression.csv`
-    : ""
-
   const [positions, setPositions] = useState<string[]>([])
   const [cropsByPos, setCropsByPos] = useState<Map<string, Array<{ posId: string; cropId: string; shape: number[] }>>>(new Map())
   const [loading, setLoading] = useState(false)
   const [pos, setPos] = useState<string>("000")
   const [channel, setChannel] = useState(0)
+  const posIdUnpadded = pos ? String(Number.parseInt(pos, 10)) : ""
+  const defaultOutput =
+    rootPath && pos
+      ? `${rootPath.replace(/\/$/, "")}/Pos${posIdUnpadded}_expression.csv`
+      : ""
   const [output, setOutput] = useState(defaultOutput)
 
   useEffect(() => {
@@ -76,9 +77,9 @@ export function ExpressionTaskConfigModal({
   const nChannels = firstCropInfo?.shape?.[1] ?? 1
 
   const handleBrowseOutput = useCallback(async () => {
-    const result = await window.mupatternDesktop.tasks.pickExpressionOutput()
+    const result = await window.mupatternDesktop.tasks.pickExpressionOutput(output)
     if (result) setOutput(result.path)
-  }, [])
+  }, [output])
 
   const handleCreate = useCallback(() => {
     onCreate({
@@ -120,7 +121,7 @@ export function ExpressionTaskConfigModal({
                 >
                   {positions.map((p) => (
                     <option key={p} value={p}>
-                      {p}
+                      {Number.parseInt(p, 10)}
                     </option>
                   ))}
                 </select>
@@ -147,7 +148,7 @@ export function ExpressionTaskConfigModal({
                     className="flex-1 border rounded px-3 py-2 bg-background text-sm"
                     value={output}
                     onChange={(e) => setOutput(e.target.value)}
-                    placeholder="expression.csv"
+                    placeholder="Pos0_expression.csv"
                   />
                   <Button variant="outline" size="sm" onClick={handleBrowseOutput}>
                     Browse

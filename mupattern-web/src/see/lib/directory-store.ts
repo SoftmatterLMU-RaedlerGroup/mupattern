@@ -1,7 +1,7 @@
 /**
  * Zarrita-compatible AsyncReadable store backed by a browser
- * FileSystemDirectoryHandle.  Each zarr key (e.g. "/pos/150/crop/000/.zarray")
- * maps to a file path relative to the root directory handle.
+ * FileSystemDirectoryHandle.  Zarr v3 keys (e.g. "pos/150/crop/000/zarr.json")
+ * map to file paths relative to the root directory handle.
  *
  * Implements the minimal interface zarrita needs:
  *   get(key: string): Promise<Uint8Array | undefined>

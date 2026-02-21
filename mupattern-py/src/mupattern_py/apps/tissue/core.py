@@ -1,14 +1,16 @@
-"""mutissue core – segment crops with Cellpose v4 or fluo-only watershed, measure per-cell fluorescence. Used by CLI and API."""
+"""Tissue core – segment crops with Cellpose v4 or fluo-only watershed, measure per-cell fluorescence, plot."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import zarr
 from scipy import ndimage
 from skimage.segmentation import watershed
 
+from ...common.io_zarr import open_zarr_group
 from ...common.progress import ProgressCallback
 
 
@@ -81,8 +83,7 @@ def run_segment_watershed(
     on_progress: ProgressCallback | None = None,
 ) -> None:
     """Segment each crop per frame: blur, threshold with background (or median of frame), watershed on foreground. Same masks.zarr layout."""
-    store = zarr.DirectoryStore(str(zarr_path))
-    root = zarr.open_group(store, mode="r")
+    root = open_zarr_group(zarr_path, mode="r")
     pos_grp = root[f"pos/{pos:03d}"]
     crop_grp = pos_grp["crop"]
     crop_ids = sorted(crop_grp.keys())
@@ -91,8 +92,7 @@ def run_segment_watershed(
     except KeyError:
         bg_arr = None
 
-    out_store = zarr.DirectoryStore(str(output_masks))
-    out_root = zarr.open_group(out_store, mode="a")
+    out_root = zarr.open_group(str(output_masks), mode="a", zarr_format=3)
     out_pos_grp = out_root.require_group(f"pos/{pos:03d}")
     mask_crop_grp = out_pos_grp.require_group("crop")
 
@@ -104,7 +104,7 @@ def run_segment_watershed(
         arr = crop_grp[crop_id]
         n_times, _, _, h, w = arr.shape
         mask_arr = mask_crop_grp.zeros(
-            crop_id,
+            name=crop_id,
             shape=(n_times, h, w),
             chunks=(1, h, w),
             dtype=np.uint32,
@@ -146,8 +146,7 @@ def run_segment(
     on_progress: ProgressCallback | None = None,
 ) -> None:
     """Segment each crop per frame with Cellpose or CellSAM (phase + fluorescence), save masks to masks.zarr (same layout as crops)."""
-    store = zarr.DirectoryStore(str(zarr_path))
-    root = zarr.open_group(store, mode="r")
+    root = open_zarr_group(zarr_path, mode="r")
     crop_grp = root[f"pos/{pos:03d}/crop"]
     crop_ids = sorted(crop_grp.keys())
 
@@ -170,8 +169,7 @@ def run_segment(
     else:
         raise ValueError(f"Unknown segment backend {backend!r}. Use 'cellpose' or 'cellsam'.")
 
-    out_store = zarr.DirectoryStore(str(output_masks))
-    out_root = zarr.open_group(out_store, mode="a")
+    out_root = zarr.open_group(str(output_masks), mode="a", zarr_format=3)
     pos_grp = out_root.require_group(f"pos/{pos:03d}")
     mask_crop_grp = pos_grp.require_group("crop")
 
@@ -183,7 +181,7 @@ def run_segment(
         arr = crop_grp[crop_id]
         n_times, _, _, h, w = arr.shape
         mask_arr = mask_crop_grp.zeros(
-            crop_id,
+            name=crop_id,
             shape=(n_times, h, w),
             chunks=(1, h, w),
             dtype=np.uint32,
@@ -230,8 +228,7 @@ def run_analyze(
     on_progress: ProgressCallback | None = None,
 ) -> None:
     """Load crops.zarr and masks.zarr; compute per-cell total fluorescence, cell area, background; write CSV."""
-    crop_store = zarr.DirectoryStore(str(zarr_path))
-    crop_root = zarr.open_group(crop_store, mode="r")
+    crop_root = open_zarr_group(zarr_path, mode="r")
     pos_grp = crop_root[f"pos/{pos:03d}"]
     crop_grp = pos_grp["crop"]
     crop_ids = sorted(crop_grp.keys())
@@ -240,8 +237,7 @@ def run_analyze(
     except KeyError:
         bg_arr = None  # missing → background 0
 
-    mask_store = zarr.DirectoryStore(str(masks_path))
-    mask_root = zarr.open_group(mask_store, mode="r")
+    mask_root = open_zarr_group(masks_path, mode="r")
     mask_crop_grp = mask_root[f"pos/{pos:03d}/crop"]
 
     rows: list[tuple[int, str, int, float, int, float]] = []
@@ -281,15 +277,66 @@ def run_analyze(
         on_progress(1.0, f"Wrote {len(rows)} rows to {output}")
 
 
+def run_pipeline(
+    zarr_path: Path,
+    pos: int,
+    channel_fluorescence: int,
+    output: Path,
+    *,
+    method: str = "cellpose",
+    channel_phase: int | None = None,
+    masks_path: Path | None = None,
+    sigma: float = 2.0,
+    margin: float = 0.0,
+    min_distance: int = 5,
+    on_progress: ProgressCallback | None = None,
+) -> None:
+    """Run segment then analyze: write masks, then CSV. masks_path defaults to output.parent / masks.zarr."""
+    masks = masks_path if masks_path is not None else output.parent / "masks.zarr"
+
+    if method in ("cellpose", "cellsam"):
+        if channel_phase is None:
+            raise ValueError(f"When method={method}, channel_phase is required")
+        run_segment(
+            zarr_path,
+            pos,
+            channel_phase,
+            channel_fluorescence,
+            masks,
+            backend=method,
+            on_progress=lambda p, m: on_progress(p * 0.5, m) if on_progress else None,
+        )
+    elif method == "watershed":
+        run_segment_watershed(
+            zarr_path,
+            pos,
+            channel_fluorescence,
+            masks,
+            sigma=sigma,
+            margin=margin,
+            min_distance=min_distance,
+            on_progress=lambda p, m: on_progress(p * 0.5, m) if on_progress else None,
+        )
+    else:
+        raise ValueError(f"Unknown method {method!r}. Use 'cellpose', 'cellsam', or 'watershed'.")
+
+    run_analyze(
+        zarr_path,
+        masks,
+        pos,
+        channel_fluorescence,
+        output,
+        on_progress=lambda p, m: on_progress(0.5 + p * 0.5, m) if on_progress else None,
+    )
+
+
 def run_plot(input_csv: Path, output_dir: Path, gfp_threshold: float) -> None:
-    """Plot GFP+ count and median (total − area×background) per crop over time. All crop traces in grey; red trace = median across crops. Writes two square plots into output_dir: gfp_count.png and median_fluorescence.png. For accurate total fluorescence use the expression module."""
+    """Plot GFP+ count and median (total − area×background) per crop over time."""
     import matplotlib
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     from matplotlib.ticker import MaxNLocator
-
-    import pandas as pd
 
     def _style_ax(ax: plt.Axes) -> None:
         ax.xaxis.set_major_locator(MaxNLocator(nbins=4))
@@ -309,7 +356,7 @@ def run_plot(input_csv: Path, output_dir: Path, gfp_threshold: float) -> None:
     df["fluo_above_bg"] = df["total_fluorescence"] - df["cell_area"] * df["background"]
     gfp = df[df["mean_above_bg"] > gfp_threshold]
     crops = sorted(gfp["crop"].unique())
-    size = 6  # squareish
+    size = 6
     grey = (0.5, 0.5, 0.5, 1.0)
 
     if not crops:
@@ -334,7 +381,6 @@ def run_plot(input_csv: Path, output_dir: Path, gfp_threshold: float) -> None:
     median_per_t = gfp.groupby(["crop", "t"])["fluo_above_bg"].median().reset_index()
     median_per_t.columns = ["crop", "t", "median_above_bg"]
 
-    # GFP count: per-crop traces in grey, median across crops in red
     fig, ax = plt.subplots(figsize=(size, size))
     count_rows = []
     for crop in crops:
@@ -357,7 +403,6 @@ def run_plot(input_csv: Path, output_dir: Path, gfp_threshold: float) -> None:
     plt.savefig(count_path, dpi=150, bbox_inches="tight")
     plt.close()
 
-    # Median fluorescence: per-crop traces in grey, median across crops in red
     fig, ax = plt.subplots(figsize=(size, size))
     for crop in crops:
         crop_med = median_per_t[median_per_t["crop"] == crop]

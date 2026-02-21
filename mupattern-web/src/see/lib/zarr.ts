@@ -100,10 +100,9 @@ export async function discoverStore(
 
     for (const cropId of cropIds) {
       try {
-        const arr = await zarr.open(
-          root.resolve(`pos/${posId}/crop/${cropId}`),
-          { kind: "array" }
-        );
+        const arr = await zarr.open.v3(root.resolve(`pos/${posId}/crop/${cropId}`), {
+          kind: "array",
+        });
         const attrs = (arr.attrs ?? {}) as Record<string, unknown>;
         infos.push({
           posId,
@@ -134,10 +133,9 @@ export async function loadFrame(
   z: number = 0
 ): Promise<{ data: Uint16Array; height: number; width: number }> {
   const root = zarr.root(store);
-  const arr = await zarr.open(
-    root.resolve(`pos/${posId}/crop/${cropId}`),
-    { kind: "array" }
-  );
+  const arr = await zarr.open.v3(root.resolve(`pos/${posId}/crop/${cropId}`), {
+    kind: "array",
+  });
 
   const chunk = await arr.getChunk([t, c, z, 0, 0]);
   // chunk.shape is the full chunk shape: [1, 1, 1, H, W]

@@ -20,9 +20,11 @@ pub fn parse_slice_string(s: &str, length: usize) -> Result<Vec<usize>, String> 
                 .map(|p| {
                     let t = p.trim();
                     if t.is_empty() {
-                        None
+                        Ok(None)
                     } else {
-                        Some(t.parse().map_err(|_| format!("Invalid slice segment: {:?}", segment))?)
+                        t.parse()
+                            .map_err(|_| format!("Invalid slice segment: {:?}", segment))
+                            .map(Some)
                     }
                 })
                 .collect::<Result<_, _>>()?;

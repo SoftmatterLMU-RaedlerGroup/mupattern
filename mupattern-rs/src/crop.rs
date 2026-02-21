@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-use crate::zarr_v2;
+use crate::zarr;
 
 #[derive(Args, Clone)]
 pub struct CropArgs {
@@ -70,7 +70,8 @@ fn discover_tiffs(
         if !entry.file_type()?.is_file() {
             continue;
         }
-        let name = entry.file_name().to_string_lossy();
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
         let cap = match re.captures(&name) {
             Some(c) => c,
             None => continue,
@@ -114,24 +115,6 @@ fn extract_crop_u16(
     h: u32,
 ) -> Vec<u16> {
     let mut out = vec![0u16; (w * h) as usize];
-    for r in 0..h {
-        let src_start = ((y + r) * frame_width + x) as usize;
-        let dst_start = (r * w) as usize;
-        out[dst_start..dst_start + w as usize]
-            .copy_from_slice(&frame[src_start..src_start + w as usize]);
-    }
-    out
-}
-
-fn extract_crop_u8(
-    frame: &[u8],
-    frame_width: u32,
-    x: u32,
-    y: u32,
-    w: u32,
-    h: u32,
-) -> Vec<u8> {
-    let mut out = vec![0u8; (w * h) as usize];
     for r in 0..h {
         let src_start = ((y + r) * frame_width + x) as usize;
         let dst_start = (r * w) as usize;
@@ -225,6 +208,8 @@ pub fn run(
 
     let output_root = Path::new(&args.output);
     let pos_id = format!("{:03}", args.pos);
+    let store = zarr::open_store(output_root)?;
+    zarr::ensure_pos_crop_groups(&store, &pos_id)?;
 
     let first_path = index.get(&keys[0]).unwrap();
     let (_first_frame, width, height) = read_tiff_frame(first_path)?;
@@ -233,24 +218,37 @@ pub fn run(
     let n_channels_u = n_channels as u64;
     let n_z_u = n_z as u64;
 
+    let mut crop_arrays: Vec<zarr::StoreArray> = Vec::new();
     for (i, bb) in bboxes.iter().enumerate() {
         let crop_id = format!("{:03}", i);
-        let array_path = format!("pos/{}/crop/{}", pos_id, crop_id);
-        fs::create_dir_all(output_root.join(&array_path))?;
+        let array_path = format!("/pos/{}/crop/{}", pos_id, crop_id);
         let shape = vec![n_times_u, n_channels_u, n_z_u, bb.h as u64, bb.w as u64];
         let chunks = vec![1, 1, 1, bb.h as u64, bb.w as u64];
-        zarr_v2::write_array_u16(output_root, &array_path, shape, chunks)?;
-        zarr_v2::write_crop_zattrs(output_root, &array_path, bb.x, bb.y, bb.w, bb.h)?;
+        let attrs = serde_json::json!({
+            "axis_names": ["t", "c", "z", "y", "x"],
+            "bbox": {"x": bb.x, "y": bb.y, "w": bb.w, "h": bb.h}
+        })
+        .as_object()
+        .cloned();
+        let arr = zarr::create_array_u16(&store, &array_path, shape, chunks, attrs)?;
+        crop_arrays.push(arr);
     }
 
-    if args.background {
-        let bg_path = format!("pos/{}/background", pos_id);
-        fs::create_dir_all(output_root.join(&bg_path))?;
-        let shape = vec![n_times_u, n_channels_u, n_z_u];
-        let chunks = vec![1, 1, 1];
-        zarr_v2::write_array_f64(output_root, &bg_path, shape, chunks)?;
-        zarr_v2::write_background_zattrs(output_root, &bg_path)?;
-    }
+    let bg_array: Option<zarr::StoreArray> =
+        if args.background {
+            let bg_path = format!("/pos/{}/background", pos_id);
+            let shape = vec![n_times_u, n_channels_u, n_z_u];
+            let chunks = vec![1, 1, 1];
+            let attrs = serde_json::json!({
+                "axis_names": ["t", "c", "z"],
+                "description": "Median of pixels outside all crop bounding boxes"
+            })
+            .as_object()
+            .cloned();
+            Some(zarr::create_array_f64(&store, &bg_path, shape, chunks, attrs)?)
+        } else {
+            None
+        };
 
     let mask: Vec<bool> = if args.background {
         let mut m = vec![false; (width * height) as usize];
@@ -276,34 +274,28 @@ pub fn run(
 
         match &frame_data {
             FrameData::U16(frame) => {
-                for (crop_idx, bb) in bboxes.iter().enumerate() {
+                for (arr, bb) in crop_arrays.iter().zip(bboxes.iter()) {
                     let crop_data = extract_crop_u16(frame, width, bb.x, bb.y, bb.w, bb.h);
-                    let crop_id = format!("{:03}", crop_idx);
-                    let array_path = format!("pos/{}/crop/{}", pos_id, crop_id);
-                    let chunk_key = format!("{}.{}.{}.0.0", t, c, z);
-                    zarr_v2::write_chunk_u16(output_root, &array_path, &chunk_key, &crop_data)?;
+                    let chunk_indices = [t as u64, c as u64, z as u64, 0, 0];
+                    zarr::store_chunk_u16(arr, &chunk_indices, &crop_data)?;
                 }
-                if args.background {
+                if let Some(ref bg) = bg_array {
                     let med = median_outside_mask_u16(frame, width, height, &mask);
-                    let bg_path = format!("pos/{}/background", pos_id);
-                    let chunk_key = format!("{}.{}.{}", t, c, z);
-                    zarr_v2::write_chunk_f64(output_root, &bg_path, &chunk_key, med)?;
+                    let chunk_indices = [t as u64, c as u64, z as u64];
+                    zarr::store_chunk_f64(bg, &chunk_indices, med)?;
                 }
             }
             FrameData::U8(frame) => {
                 let frame_u16: Vec<u16> = frame.iter().map(|&v| v as u16).collect();
-                for (crop_idx, bb) in bboxes.iter().enumerate() {
+                for (arr, bb) in crop_arrays.iter().zip(bboxes.iter()) {
                     let crop_data = extract_crop_u16(&frame_u16, width, bb.x, bb.y, bb.w, bb.h);
-                    let crop_id = format!("{:03}", crop_idx);
-                    let array_path = format!("pos/{}/crop/{}", pos_id, crop_id);
-                    let chunk_key = format!("{}.{}.{}.0.0", t, c, z);
-                    zarr_v2::write_chunk_u16(output_root, &array_path, &chunk_key, &crop_data)?;
+                    let chunk_indices = [t as u64, c as u64, z as u64, 0, 0];
+                    zarr::store_chunk_u16(arr, &chunk_indices, &crop_data)?;
                 }
-                if args.background {
+                if let Some(ref bg) = bg_array {
                     let med = median_outside_mask_u8(frame, width, height, &mask);
-                    let bg_path = format!("pos/{}/background", pos_id);
-                    let chunk_key = format!("{}.{}.{}", t, c, z);
-                    zarr_v2::write_chunk_f64(output_root, &bg_path, &chunk_key, med)?;
+                    let chunk_indices = [t as u64, c as u64, z as u64];
+                    zarr::store_chunk_f64(bg, &chunk_indices, med)?;
                 }
             }
         }

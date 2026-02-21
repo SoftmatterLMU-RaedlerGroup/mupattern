@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useStore } from "@tanstack/react-store"
-import { Button, HexBackground, ThemeToggle, useTheme } from "@mupattern/shared"
-import { ArrowLeft, Plus } from "lucide-react"
+import { AppHeader, Button } from "@mupattern/shared"
+import { Plus } from "lucide-react"
 import { workspaceStore } from "@/workspace/store"
 import { CropTaskConfigModal } from "@/tasks/components/CropTaskConfigModal"
 import { MovieTaskConfigModal } from "@/tasks/components/MovieTaskConfigModal"
@@ -32,7 +32,6 @@ interface TaskRecord {
 }
 
 export default function TasksDashboardPage() {
-  const { theme } = useTheme()
   const navigate = useNavigate()
   const workspaces = useStore(workspaceStore, (s) => s.workspaces)
   const activeId = useStore(workspaceStore, (s) => s.activeId)
@@ -439,25 +438,15 @@ export default function TasksDashboardPage() {
   )
 
   return (
-    <div className="flex flex-col min-h-screen">
-      <HexBackground theme={theme} />
-      <div className="absolute top-4 right-4 z-10">
-        <ThemeToggle />
-      </div>
+    <div className="flex flex-col h-screen">
+      <AppHeader
+        title="Tasks"
+        subtitle="Run crop, expression, kill, and movie tasks"
+        backTo="/workspace"
+      />
 
-      <div className="relative flex-1 flex flex-col items-center p-6 gap-6">
-        <div className="w-full max-w-3xl space-y-4 backdrop-blur-sm bg-background/80 rounded-lg border p-6">
-          <div className="flex items-center justify-between">
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => navigate("/workspace")}
-            >
-              <ArrowLeft className="size-4" />
-            </Button>
-            <h1 className="text-xl font-medium">Tasks</h1>
-          </div>
-
+      <div className="flex-1 min-h-0 overflow-auto">
+        <div className="p-6 space-y-4">
           {!activeWorkspace ? (
             <p className="text-sm text-muted-foreground">
               Open a workspace from the workspace dashboard first.
@@ -470,8 +459,10 @@ export default function TasksDashboardPage() {
 
               <div className="relative">
                 <Button
+                  variant="outline"
                   onClick={() => setAddMenuOpen((o) => !o)}
                   disabled={!activeWorkspace}
+                  className="border bg-white text-black hover:bg-gray-100 dark:bg-black dark:text-white dark:hover:bg-gray-900 dark:border-input"
                 >
                   <Plus className="size-4 mr-2" />
                   Add task

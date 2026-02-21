@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useLayoutEffect, useRef, useMemo } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { useStore } from "@tanstack/react-store";
 import type { StoreIndex, CropInfo, ZarrStore } from "@/see/lib/zarr";
 import { loadFrame, loadMaskFrame, hasMasks } from "@/see/lib/zarr";
@@ -94,10 +94,7 @@ export function Viewer({ store, index, onSaveAsMovie }: ViewerProps) {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; crop: CropInfo } | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
   const [workspaceHasMasks, setWorkspaceHasMasks] = useState(false);
-  const [autoContrastDone, setAutoContrastDone] = useState(
-    // If we have persisted contrast values that aren't defaults, skip auto
-    contrastMin !== 0 || contrastMax !== 65535
-  );
+  const [autoContrastDone, setAutoContrastDone] = useState(true);
 
   const canvasRefs = useRef<Map<string, HTMLCanvasElement>>(new Map());
   const playIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -219,15 +216,16 @@ export function Viewer({ store, index, onSaveAsMovie }: ViewerProps) {
         const allData: number[] = [];
         for (const f of frames) {
           if (f) {
-            for (let i = 0; i < f.data.length; i += 4) {
+            for (let i = 0; i < f.data.length; i++) {
               allData.push(f.data[i]);
             }
           }
         }
         if (allData.length > 0) {
-          const sorted = new Uint16Array(allData).sort();
-          const lo = sorted[Math.floor(sorted.length * 0.02)];
-          const hi = sorted[Math.floor(sorted.length * 0.98)];
+          const sorted = new Uint16Array(allData).sort((a, b) => a - b);
+          const lo = sorted[Math.floor(sorted.length * 0.001)];
+          let hi = sorted[Math.floor(sorted.length * 0.999)];
+          if (hi === lo) hi = lo + 1;
           renderContrastMin = lo;
           renderContrastMax = hi;
           persistContrast(lo, hi);
@@ -296,10 +294,6 @@ export function Viewer({ store, index, onSaveAsMovie }: ViewerProps) {
   const resetAutoContrast = useCallback(() => {
     setAutoContrastDone(false);
   }, []);
-
-  useLayoutEffect(() => {
-    setAutoContrastDone(false);
-  }, [store, validPos, clampedC, clampedZ]);
 
   // Annotation handler: click cycles true → false → remove
   const handleAnnotate = useCallback(
@@ -422,80 +416,85 @@ export function Viewer({ store, index, onSaveAsMovie }: ViewerProps) {
         backTo="/workspace"
       />
       {frameLoadError && (
-        <div className="px-4 py-2 text-xs text-destructive border-b">
+        <div className="px-4 py-2 text-xs text-destructive border-b border-border">
           {frameLoadError}
         </div>
       )}
 
-      {/* Slider row */}
-      <div className="px-4 py-1 border-b">
-        <Slider
-          min={0}
-          max={maxT}
-          value={[clampedT]}
-          onValueChange={([v]) => setT(v)}
-        />
-      </div>
-
-      {/* Frame controls + contrast */}
-      <div className="flex items-center justify-center gap-3 px-4 py-2 border-b">
-        <Button variant="ghost" size="icon-xs" onClick={() => setT(0)} disabled={clampedT === 0}>
-          <SkipBack className="size-3" />
-        </Button>
-        <Button variant="ghost" size="icon-xs" onClick={() => setT(Math.max(0, clampedT - 10))} disabled={clampedT === 0}>
-          <ChevronsLeft className="size-3" />
-        </Button>
-        <Button variant="ghost" size="icon-xs" onClick={() => setT(Math.max(0, clampedT - 1))} disabled={clampedT === 0}>
-          <ChevronLeft className="size-3" />
-        </Button>
-        <Button variant="ghost" size="icon-xs" onClick={() => setPlaying(!playing)}>
-          {playing ? <Pause className="size-3" /> : <Play className="size-3" />}
-        </Button>
-        <Button variant="ghost" size="icon-xs" onClick={() => setT(Math.min(maxT, clampedT + 1))} disabled={clampedT >= maxT}>
-          <ChevronRight className="size-3" />
-        </Button>
-        <Button variant="ghost" size="icon-xs" onClick={() => setT(Math.min(maxT, clampedT + 10))} disabled={clampedT >= maxT}>
-          <ChevronsRight className="size-3" />
-        </Button>
-        <Button variant="ghost" size="icon-xs" onClick={() => setT(maxT)} disabled={clampedT >= maxT}>
-          <SkipForward className="size-3" />
-        </Button>
-
-        <span className="text-sm tabular-nums whitespace-nowrap">
-          t = {clampedT} / {maxT}
-        </span>
-
-        <div className="mx-2 h-4 w-px bg-border" />
-
-        <div className="flex items-center gap-2 text-sm">
-          <span className="text-muted-foreground">Contrast:</span>
-          <input
-            type="number"
-            value={contrastMin}
-            onChange={(e) => setContrastMin(Number(e.target.value))}
-            className="w-20 bg-secondary text-center rounded px-1 py-0.5 text-sm"
-          />
-          <span>-</span>
-          <input
-            type="number"
-            value={contrastMax}
-            onChange={(e) => setContrastMax(Number(e.target.value))}
-            className="w-20 bg-secondary text-center rounded px-1 py-0.5 text-sm"
-          />
-          <button
-            onClick={resetAutoContrast}
-            className="text-xs text-muted-foreground hover:text-foreground underline"
-          >
-            Auto
-          </button>
-        </div>
-      </div>
-
-      {/* Main area: crop grid + right sidebar */}
+      {/* Main area: crop grid + sidebars */}
       <div className="flex flex-1 overflow-hidden">
         <LeftSliceSidebar />
-        {/* Crop grid */}
-        <div className="flex-1 overflow-hidden p-4">
+        {/* Crop grid with contrast above */}
+        <div className="flex-1 overflow-hidden flex flex-col">
+          <div className="shrink-0 grid grid-cols-3 items-center gap-4 px-4 py-2 border-b border-border">
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="icon-xs" disabled={clampedPage === 0} onClick={() => setPage(clampedPage - 1)} title="Previous page">
+                <ChevronLeft className="size-3" />
+              </Button>
+              <span className="text-sm tabular-nums min-w-[4rem] text-center">
+                {clampedPage + 1} / {totalPages}
+              </span>
+              <Button variant="ghost" size="icon-xs" disabled={clampedPage >= totalPages - 1} onClick={() => setPage(clampedPage + 1)} title="Next page">
+                <ChevronRight className="size-3" />
+              </Button>
+            </div>
+            <div className="flex items-center gap-2 text-sm justify-self-center">
+              <span className="text-muted-foreground">Contrast:</span>
+              <input
+                type="number"
+                value={contrastMin}
+                onChange={(e) => setContrastMin(Number(e.target.value))}
+                className="w-20 bg-secondary text-center rounded px-1 py-0.5 text-sm"
+              />
+              <span>-</span>
+              <input
+                type="number"
+                value={contrastMax}
+                onChange={(e) => setContrastMax(Number(e.target.value))}
+                className="w-20 bg-secondary text-center rounded px-1 py-0.5 text-sm"
+              />
+              <Button variant="outline" size="xs" className="text-sm" onClick={resetAutoContrast}>
+                Auto
+              </Button>
+            </div>
+            <span className="text-sm tabular-nums whitespace-nowrap justify-self-end">
+              t = {clampedT} / {maxT}
+            </span>
+          </div>
+          {/* Frame control */}
+          <div className="shrink-0 border-b border-border flex flex-col gap-2 px-4 py-2">
+            <div className="flex items-center justify-center gap-2">
+              <Button variant="ghost" size="icon-xs" onClick={() => setT(0)} disabled={clampedT === 0} title="First frame">
+                <SkipBack className="size-3" />
+              </Button>
+              <Button variant="ghost" size="icon-xs" onClick={() => setT(Math.max(0, clampedT - 10))} disabled={clampedT === 0} title="-10 frames">
+                <ChevronsLeft className="size-3" />
+              </Button>
+              <Button variant="ghost" size="icon-xs" onClick={() => setT(Math.max(0, clampedT - 1))} disabled={clampedT === 0} title="Previous frame">
+                <ChevronLeft className="size-3" />
+              </Button>
+              <Button variant="ghost" size="icon-xs" onClick={() => setPlaying(!playing)} title={playing ? "Pause" : "Play"}>
+                {playing ? <Pause className="size-3" /> : <Play className="size-3" />}
+              </Button>
+              <Button variant="ghost" size="icon-xs" onClick={() => setT(Math.min(maxT, clampedT + 1))} disabled={clampedT >= maxT} title="Next frame">
+                <ChevronRight className="size-3" />
+              </Button>
+              <Button variant="ghost" size="icon-xs" onClick={() => setT(Math.min(maxT, clampedT + 10))} disabled={clampedT >= maxT} title="+10 frames">
+                <ChevronsRight className="size-3" />
+              </Button>
+              <Button variant="ghost" size="icon-xs" onClick={() => setT(maxT)} disabled={clampedT >= maxT} title="Last frame">
+                <SkipForward className="size-3" />
+              </Button>
+            </div>
+            <Slider
+              min={0}
+              max={maxT}
+              value={[clampedT]}
+              onValueChange={([v]) => setT(v)}
+              className="w-full"
+            />
+          </div>
+          <div className="flex-1 overflow-hidden p-4 min-h-0">
           <div className="grid grid-cols-3 grid-rows-3 gap-2 h-full">
             {pageCrops.map((crop) => (
               <div
@@ -518,10 +517,11 @@ export function Viewer({ store, index, onSaveAsMovie }: ViewerProps) {
               </div>
             ))}
           </div>
+          </div>
         </div>
 
         {/* Right sidebar: overlays */}
-        <aside className="w-48 border-l border-border p-3 flex flex-col gap-4 text-sm overflow-y-auto">
+        <aside className="w-64 flex-shrink-0 border-l border-border p-3 flex flex-col gap-4 text-sm overflow-y-auto">
           {/* Annotations section */}
           <div className="flex flex-col gap-2">
             <h3 className="font-medium text-xs uppercase text-muted-foreground tracking-wide">Annotations</h3>
@@ -648,30 +648,6 @@ export function Viewer({ store, index, onSaveAsMovie }: ViewerProps) {
           </button>
         </div>
       )}
-
-      {/* Pagination */}
-      <div className="flex items-center justify-center gap-4 px-4 py-2 border-t">
-        <span className="text-sm text-muted-foreground">
-          {crops.length} crops
-        </span>
-        <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon-xs" disabled={clampedPage === 0} onClick={() => setPage(0)}>
-          <SkipBack className="size-3" />
-        </Button>
-        <Button variant="ghost" size="icon-xs" disabled={clampedPage === 0} onClick={() => setPage(clampedPage - 1)}>
-          <ChevronLeft className="size-3" />
-        </Button>
-        <span className="text-sm tabular-nums">
-          Page {clampedPage + 1} / {totalPages}
-        </span>
-        <Button variant="ghost" size="icon-xs" disabled={clampedPage >= totalPages - 1} onClick={() => setPage(clampedPage + 1)}>
-          <ChevronRight className="size-3" />
-        </Button>
-        <Button variant="ghost" size="icon-xs" disabled={clampedPage >= totalPages - 1} onClick={() => setPage(totalPages - 1)}>
-          <SkipForward className="size-3" />
-        </Button>
-        </div>
-      </div>
     </div>
   );
 }
