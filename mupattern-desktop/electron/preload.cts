@@ -145,6 +145,7 @@ contextBridge.exposeInMainWorld("mupatternDesktop", {
     updateTask: (id: string, updates: unknown) =>
       ipcRenderer.invoke("tasks:update-task", id, updates),
     listTasks: () => ipcRenderer.invoke("tasks:list-tasks"),
+    deleteCompletedTasks: () => ipcRenderer.invoke("tasks:delete-completed-tasks"),
   },
   application: {
     listExpressionCsv: (workspacePath: string) =>

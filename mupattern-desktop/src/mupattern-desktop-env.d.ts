@@ -237,6 +237,7 @@ declare global {
         insertTask: (task: unknown) => Promise<boolean>;
         updateTask: (id: string, updates: unknown) => Promise<boolean>;
         listTasks: () => Promise<unknown[]>;
+        deleteCompletedTasks: () => Promise<boolean>;
       };
       application: {
         listExpressionCsv: (

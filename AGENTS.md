@@ -13,7 +13,7 @@
 - **nd2-rs** (external): Pure Rust ND2 reader at github.com/keejkrej/nd2-rs. Dep: `nd2-rs = { git = "..." }` or `nd2-rs = "0.1"`. API: `sizes()` → (P,T,C,Z,Y,X), `read_frame_2d(p,t,c,z)` → Y×X u16.
 - **crops.zarr** layout (Zarr v3 only): `pos/{pos:03d}/crop/{crop_id}` arrays (T, C, Z, H, W); optional `pos/{pos:03d}/background` (T, C, Z) per-pixel. Expression CSV: `t,crop,intensity,area,background`. Tissue: `mupattern tissue` runs segment then analyze (writes **masks.zarr** + CSV `t,crop,cell,total_fluorescence,cell_area,background`); `plot tissue` uses `(total_fluorescence/cell_area)-background > gfp_threshold` for GFP+.
 - JS app (web): `mupattern-web` — lite web app (landing, register, see), deployed on Firebase; run with `bun run dev` from that directory
-- JS app (desktop): `mupattern-desktop` — Electron workspace-first app; run with `bun run dev` from that directory
+- JS app (desktop): `mupattern-desktop` — Electron workspace-first app; Tasks (convert, crop, movie, expression, kill) with Clean completed; run with `bun run dev` from that directory
 
 ## Product direction
 

@@ -2,7 +2,15 @@ import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { accessSync, constants } from "node:fs";
-import { access, mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
+import {
+  access,
+  copyFile,
+  mkdir,
+  readFile,
+  readdir,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import initSqlJs, { type Database } from "sql.js";
 import * as UTIF from "utif2";
 import type { Array as ZarritaArray, DataType, Location } from "zarrita";
@@ -855,7 +863,9 @@ async function persistWorkspaceDb(db: Database): Promise<void> {
 
   await mkdir(dir, { recursive: true });
   await writeFile(tempPath, Buffer.from(db.export()));
-  await rename(tempPath, targetPath);
+  // On Windows, rename() fails with EPERM when target exists; copyFile overwrites reliably.
+  await copyFile(tempPath, targetPath);
+  await unlink(tempPath);
 }
 
 async function ensureWorkspaceDb(): Promise<Database> {
@@ -1513,6 +1523,13 @@ function registerWorkspaceStateIpc(): void {
 
   ipcMain.handle("tasks:list-tasks", async () => {
     return listTasks();
+  });
+
+  ipcMain.handle("tasks:delete-completed-tasks", async () => {
+    const db = await ensureWorkspaceDb();
+    db.run("DELETE FROM tasks WHERE status NOT IN ('running', 'queued')");
+    await persistWorkspaceDb(db);
+    return true;
   });
 }
 

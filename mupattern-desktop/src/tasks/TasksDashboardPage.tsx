@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useStore } from "@tanstack/react-store";
 import { AppHeader, Button } from "@mupattern/shared";
-import { Plus } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { workspaceStore } from "@/workspace/store";
 import { CropTaskConfigModal } from "@/tasks/components/CropTaskConfigModal";
 import { ConvertTaskConfigModal } from "@/tasks/components/ConvertTaskConfigModal";
@@ -55,6 +55,9 @@ export default function TasksDashboardPage() {
   }, []);
 
   const hasRunningTasks = tasks.some((t) => t.status === "running");
+  const hasCompletedTasks = tasks.some(
+    (t) => t.status !== "running" && t.status !== "queued",
+  );
   useEffect(() => {
     if (!hasRunningTasks) return;
     const id = setInterval(() => {
@@ -542,15 +545,16 @@ export default function TasksDashboardPage() {
             </p>
           )}
 
-          <div className="relative">
-            <Button
-              variant="outline"
-              onClick={() => setAddMenuOpen((o) => !o)}
-              className="border bg-white text-black hover:bg-gray-100 dark:bg-black dark:text-white dark:hover:bg-gray-900 dark:border-input"
-            >
-              <Plus className="size-4 mr-2" />
-              Add task
-            </Button>
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Button
+                variant="outline"
+                onClick={() => setAddMenuOpen((o) => !o)}
+                className="border bg-white text-black hover:bg-gray-100 dark:bg-black dark:text-white dark:hover:bg-gray-900 dark:border-input"
+              >
+                <Plus className="size-4 mr-2" />
+                Add task
+              </Button>
             {addMenuOpen && (
               <div className="absolute left-0 top-full mt-1 border rounded bg-background shadow-lg py-1 z-20 min-w-[120px]">
                 <button
@@ -613,6 +617,20 @@ export default function TasksDashboardPage() {
                 </button>
               </div>
             )}
+            </div>
+            <Button
+              variant="outline"
+              disabled={!hasCompletedTasks}
+              onClick={async () => {
+                await window.mupatternDesktop.tasks.deleteCompletedTasks();
+                const list = await window.mupatternDesktop.tasks.listTasks();
+                setTasks(list as unknown as TaskRecord[]);
+              }}
+              className="border bg-white text-black hover:bg-gray-100 dark:bg-black dark:text-white dark:hover:bg-gray-900 dark:border-input disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Trash2 className="size-4 mr-2" />
+              Clean completed
+            </Button>
           </div>
 
           {error && <p className="text-sm text-destructive">{error}</p>}

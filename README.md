@@ -115,7 +115,7 @@ bun install
 bun run dev
 ```
 
-From `mupattern-desktop`, use the workspace dashboard to open a folder, jump into Register, and navigate positions with prev/next.
+From `mupattern-desktop`, use the workspace dashboard to open a folder, jump into Register, and navigate positions with prev/next. Tasks (convert, crop, movie, expression, kill) run from the Tasks page; use **Clean completed** to remove finished tasks from the list.
 
 ### 2a. Convert ND2 to TIFF (mupattern convert)
 
