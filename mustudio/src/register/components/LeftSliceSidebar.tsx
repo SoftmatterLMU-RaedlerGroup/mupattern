@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react"
+import { toast } from "sonner"
 import { useStore } from "@tanstack/react-store"
 import { Button } from "@mupattern/shared"
 import { ChevronLeft, ChevronRight } from "lucide-react"
@@ -151,6 +152,7 @@ export function LeftSliceSidebar({
         return
       }
       onWorkspaceImageError(null)
+      toast.success("Bbox CSV saved")
     } catch {
       onWorkspaceImageError("Failed to save bbox CSV to workspace.")
     } finally {

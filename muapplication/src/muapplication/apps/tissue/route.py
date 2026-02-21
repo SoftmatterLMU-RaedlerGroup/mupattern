@@ -6,8 +6,8 @@ from pathlib import Path
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from ...common.jobs import get_job_manager
-from ...common.types import JobRecord
+from ...common.tasks import get_task_manager
+from ...common.types import TaskRecord
 from .core import run_analyze, run_plot, run_segment, run_segment_watershed
 
 router = APIRouter(tags=["tissue"])
@@ -40,7 +40,7 @@ class PlotRequest(BaseModel):
 
 
 def _submit(kind: str, payload: dict, fn):
-    mgr = get_job_manager()
+    mgr = get_task_manager()
 
     def runner(request, on_progress, on_log, cancel_event: threading.Event):
         on_log(f"Running {kind}")
@@ -50,8 +50,8 @@ def _submit(kind: str, payload: dict, fn):
     return mgr.submit(kind, payload, runner)
 
 
-@router.post("/jobs/tissue.segment", response_model=JobRecord)
-def tissue_segment(req: SegmentRequest) -> JobRecord:
+@router.post("/tasks/tissue.segment", response_model=TaskRecord)
+def tissue_segment(req: SegmentRequest) -> TaskRecord:
     def fn(request: dict, on_progress):
         method = request.get("method", "cellpose")
         if method in ("cellpose", "cellsam"):
@@ -83,8 +83,8 @@ def tissue_segment(req: SegmentRequest) -> JobRecord:
     return _submit("tissue.segment", req.model_dump(), fn)
 
 
-@router.post("/jobs/tissue.analyze", response_model=JobRecord)
-def tissue_analyze(req: AnalyzeRequest) -> JobRecord:
+@router.post("/tasks/tissue.analyze", response_model=TaskRecord)
+def tissue_analyze(req: AnalyzeRequest) -> TaskRecord:
     def fn(request: dict, on_progress):
         run_analyze(
             Path(request["zarr_path"]),
@@ -98,8 +98,8 @@ def tissue_analyze(req: AnalyzeRequest) -> JobRecord:
     return _submit("tissue.analyze", req.model_dump(), fn)
 
 
-@router.post("/jobs/tissue.plot", response_model=JobRecord)
-def tissue_plot(req: PlotRequest) -> JobRecord:
+@router.post("/tasks/tissue.plot", response_model=TaskRecord)
+def tissue_plot(req: PlotRequest) -> TaskRecord:
     def fn(request: dict, _on_progress):
         run_plot(
             Path(request["input"]),

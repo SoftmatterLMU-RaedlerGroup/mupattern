@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-JobStatus = Literal["queued", "running", "succeeded", "failed", "canceled"]
+TaskStatus = Literal["queued", "running", "succeeded", "failed", "canceled"]
 
 
 class ProgressEvent(BaseModel):
@@ -14,10 +14,10 @@ class ProgressEvent(BaseModel):
     timestamp: datetime
 
 
-class JobRecord(BaseModel):
+class TaskRecord(BaseModel):
     id: str
     kind: str
-    status: JobStatus
+    status: TaskStatus
     created_at: datetime
     started_at: datetime | None = None
     finished_at: datetime | None = None

@@ -12,7 +12,7 @@ export function Landing({ loading, error }: LandingProps) {
   const navigate = useNavigate()
 
   return (
-    <div className="relative flex flex-col items-center justify-center h-screen gap-8 p-6">
+    <div className="relative flex min-h-[100dvh] flex-col items-center justify-center gap-8 p-6">
       <HexBackground theme={theme} />
 
       <div className="absolute top-4 right-4 z-10">

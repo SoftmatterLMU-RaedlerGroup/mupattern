@@ -33,7 +33,6 @@ dependencies = [
 
 [project.scripts]
 muapplication = "muapplication.cli:app"
-muapplication-api = "muapplication.api.app:main"
 muapplication-file-gui = "muapplication.gui.file:main"
 muapplication-kill-gui = "muapplication.gui.kill:main"
 muapplication-expression-gui = "muapplication.gui.expression:main"

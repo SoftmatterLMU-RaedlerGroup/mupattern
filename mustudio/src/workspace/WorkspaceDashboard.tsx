@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom"
 import { useStore } from "@tanstack/react-store"
 import { Button, HexBackground, ThemeToggle, useTheme } from "@mupattern/shared"
 import { ArrowLeft, Plus } from "lucide-react"
+import { parse as yamlParse, stringify as yamlStringify } from "yaml"
+import { toast } from "sonner"
 import {
   workspaceStore,
   addWorkspace,
@@ -13,10 +15,12 @@ import {
   removePositionTag,
   togglePositionTagFilter,
   clearPositionTagFilters,
+  setPositionTagsFromDict,
   getWorkspaceVisiblePositionIndices,
   type Workspace,
 } from "@/workspace/store"
 import { parseSliceStringOverValues } from "@/lib/slices"
+import { posTagsToDict } from "@/lib/tags-yaml"
 
 export default function WorkspaceDashboard() {
   const { theme } = useTheme()
@@ -112,6 +116,70 @@ export default function WorkspaceDashboard() {
     setTagLabel("")
   }, [tagLabel, tagSlice])
 
+  const handleSaveTag = useCallback(
+    async (ws: Workspace) => {
+      const dict = posTagsToDict(ws.positions, ws.posTags)
+      const yaml = yamlStringify(dict)
+      try {
+        if ("showSaveFilePicker" in window) {
+          const handle = await (window as Window & {
+            showSaveFilePicker: (opts: {
+              suggestedName?: string
+              types?: Array<{ description?: string; accept: Record<string, string[]> }>
+            }) => Promise<FileSystemFileHandle>
+          }).showSaveFilePicker({
+            suggestedName: "tags.yaml",
+            types: [{ description: "YAML", accept: { "text/yaml": [".yaml", ".yml"] } }],
+          })
+          const writable = await handle.createWritable()
+          await writable.write(yaml)
+          await writable.close()
+          toast.success("Tags saved")
+          return
+        }
+      } catch (e) {
+        if ((e as DOMException).name === "AbortError") return
+      }
+      const blob = new Blob([yaml], { type: "text/yaml" })
+      const link = document.createElement("a")
+      link.download = "tags.yaml"
+      link.href = URL.createObjectURL(blob)
+      link.click()
+      URL.revokeObjectURL(link.href)
+      toast.success("Tags saved")
+    },
+    []
+  )
+
+  const handleLoadTag = useCallback(
+    async (ws: Workspace) => {
+      const text = await window.mustudio.workspace.pickTagsFile()
+      if (text == null) return
+      let dict: Record<string, unknown>
+      try {
+        const parsed = yamlParse(text)
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          setError("Invalid tags YAML: expected object")
+          return
+        }
+        dict = parsed as Record<string, unknown>
+      } catch (e) {
+        setError(`Failed to parse YAML: ${(e as Error).message}`)
+        return
+      }
+      const tagDict: Record<string, string> = {}
+      for (const [k, v] of Object.entries(dict)) {
+        if (v == null || v === "") continue
+        const sliceStr = typeof v === "string" ? v : String(v)
+        tagDict[k.trim()] = sliceStr.trim()
+      }
+      setPositionTagsFromDict(ws.id, tagDict)
+      setError(null)
+      toast.success("Tags loaded")
+    },
+    []
+  )
+
   const handleOpenRegister = useCallback(() => {
     setError(null)
     navigate("/register")
@@ -124,10 +192,10 @@ export default function WorkspaceDashboard() {
     : []
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen gap-8 p-6">
+    <div className="relative flex min-h-[100dvh] flex-col items-center justify-center gap-8 p-6">
       <HexBackground theme={theme} />
 
-      <div className="absolute top-4 right-4">
+      <div className="absolute top-4 right-4 z-10">
         <ThemeToggle />
       </div>
 
@@ -161,7 +229,7 @@ export default function WorkspaceDashboard() {
                   />
                 </div>
                 <div className="min-w-48 flex-1">
-                  <label className="text-xs text-muted-foreground">Slice</label>
+                  <label className="text-xs text-muted-foreground">Position slice</label>
                   <input
                     type="text"
                     value={tagSlice}
@@ -170,8 +238,8 @@ export default function WorkspaceDashboard() {
                     className="w-full h-8 px-2 rounded border bg-background text-sm"
                   />
                 </div>
-                <Button size="sm" onClick={() => handleAddTag(activeWorkspace)}>
-                  Add tag slice
+                <Button size="sm" variant="outline" onClick={() => handleAddTag(activeWorkspace)}>
+                  Add tag
                 </Button>
                 <div className="min-w-48 flex-1">
                   <label className="text-xs text-muted-foreground">Filter</label>
@@ -258,35 +326,42 @@ export default function WorkspaceDashboard() {
                 })}
               </div>
             </div>
-            <div className="flex justify-end gap-2">
-              <Button
-                onClick={() => navigate("/see")}
-                className="whitespace-normal leading-tight"
-              >
-                <span className="text-center">
-                  load in
-                  <br />
-                  See
-                </span>
-              </Button>
-              <Button
-                onClick={handleOpenRegister}
-                disabled={visibleIndices.length === 0}
-                className="whitespace-normal leading-tight"
-              >
-                <span className="text-center">
-                  load in
-                  <br />
+            <div className="flex justify-between items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void handleLoadTag(activeWorkspace)}
+                >
+                  Load tag
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => handleSaveTag(activeWorkspace)}>
+                  Save tag
+                </Button>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleOpenRegister}
+                  disabled={visibleIndices.length === 0}
+                >
                   Register
-                </span>
-              </Button>
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => navigate("/see")}>
+                  See
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => navigate("/tasks")}>
+                  Tasks
+                </Button>
+              </div>
             </div>
             </>
           ) : (
             <>
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-medium">Workspaces</h2>
-              <Button onClick={handleAddWorkspace} disabled={loading}>
+              <Button size="sm" variant="outline" onClick={handleAddWorkspace} disabled={loading}>
                 <Plus className="size-4" />
                 {loading ? "Scanning..." : "Add workspace"}
               </Button>
@@ -308,12 +383,13 @@ export default function WorkspaceDashboard() {
                       {ws.positions.length} position{ws.positions.length !== 1 ? "s" : ""}
                     </p>
                     <div className="flex gap-2">
-                      <Button size="sm" onClick={() => handleOpen(ws)}>
+                      <Button size="sm" variant="outline" onClick={() => handleOpen(ws)}>
                         Open
                       </Button>
                       <Button
                         size="sm"
-                        variant="destructive"
+                        variant="outline"
+                        className="text-destructive hover:text-destructive"
                         onClick={() => removeWorkspace(ws.id)}
                       >
                         Remove

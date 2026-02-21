@@ -1,4 +1,5 @@
 import { useCallback, useRef } from "react"
+import { toast } from "sonner"
 import { ChevronsUpDown } from "lucide-react"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger, Separator, Button, Slider, Label } from "@mupattern/shared"
 import { CalibrationControls } from "@/register/components/CalibrationControls"
@@ -102,6 +103,7 @@ export function Sidebar({
         const writable = await handle.createWritable()
         await writable.write(yaml)
         await writable.close()
+        toast.success("Config saved")
         return
       }
     } catch {
@@ -114,6 +116,7 @@ export function Sidebar({
     link.href = URL.createObjectURL(blob)
     link.click()
     URL.revokeObjectURL(link.href)
+    toast.success("Config saved")
   }, [pattern, calibration])
 
   return (

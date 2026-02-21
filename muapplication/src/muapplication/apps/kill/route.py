@@ -6,8 +6,8 @@ from pathlib import Path
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from ...common.jobs import get_job_manager
-from ...common.types import JobRecord
+from ...common.tasks import get_task_manager
+from ...common.types import TaskRecord
 from .core import run_clean, run_dataset, run_plot, run_predict, run_train
 
 router = APIRouter(tags=["kill"])
@@ -52,7 +52,7 @@ class CleanRequest(BaseModel):
 
 
 def _submit(kind: str, payload: dict, fn):
-    mgr = get_job_manager()
+    mgr = get_task_manager()
 
     def runner(request, on_progress, on_log, cancel_event: threading.Event):
         on_log(f"Running {kind}")
@@ -62,24 +62,24 @@ def _submit(kind: str, payload: dict, fn):
     return mgr.submit(kind, payload, runner)
 
 
-@router.post("/jobs/kill.dataset", response_model=JobRecord)
-def kill_dataset(req: DatasetRequest) -> JobRecord:
+@router.post("/tasks/kill.dataset", response_model=TaskRecord)
+def kill_dataset(req: DatasetRequest) -> TaskRecord:
     def fn(request: dict, on_progress):
         run_dataset(Path(request["zarr_path"]), request["pos"], Path(request["annotations"]), Path(request["output"]), on_progress=on_progress)
 
     return _submit("kill.dataset", req.model_dump(), fn)
 
 
-@router.post("/jobs/kill.train", response_model=JobRecord)
-def kill_train(req: TrainRequest) -> JobRecord:
+@router.post("/tasks/kill.train", response_model=TaskRecord)
+def kill_train(req: TrainRequest) -> TaskRecord:
     def fn(request: dict, on_progress):
         run_train(Path(request["dataset"]), Path(request["output"]), request["epochs"], request["batch_size"], request["lr"], request["split"], on_progress=on_progress)
 
     return _submit("kill.train", req.model_dump(), fn)
 
 
-@router.post("/jobs/kill.predict", response_model=JobRecord)
-def kill_predict(req: PredictRequest) -> JobRecord:
+@router.post("/tasks/kill.predict", response_model=TaskRecord)
+def kill_predict(req: PredictRequest) -> TaskRecord:
     def fn(request: dict, on_progress):
         run_predict(
             Path(request["zarr_path"]),
@@ -97,16 +97,16 @@ def kill_predict(req: PredictRequest) -> JobRecord:
     return _submit("kill.predict", req.model_dump(), fn)
 
 
-@router.post("/jobs/kill.plot", response_model=JobRecord)
-def kill_plot(req: PlotRequest) -> JobRecord:
+@router.post("/tasks/kill.plot", response_model=TaskRecord)
+def kill_plot(req: PlotRequest) -> TaskRecord:
     def fn(request: dict, _on_progress):
         run_plot(Path(request["input"]), Path(request["output"]))
 
     return _submit("kill.plot", req.model_dump(), fn)
 
 
-@router.post("/jobs/kill.clean", response_model=JobRecord)
-def kill_clean(req: CleanRequest) -> JobRecord:
+@router.post("/tasks/kill.clean", response_model=TaskRecord)
+def kill_clean(req: CleanRequest) -> TaskRecord:
     def fn(request: dict, _on_progress):
         run_clean(Path(request["input"]), Path(request["output"]))
 

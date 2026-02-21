@@ -23,6 +23,7 @@ Thumbs.db
 __pycache__/
 *.pyc
 .venv/
+.muapplication/
 
 # Logs
 *.log

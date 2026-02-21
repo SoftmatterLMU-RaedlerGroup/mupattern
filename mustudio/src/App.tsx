@@ -1,8 +1,10 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
+import { Toaster } from "sonner"
 import { useStore } from "@tanstack/react-store"
 import WorkspaceDashboard from "@/workspace/WorkspaceDashboard"
 import RegisterApp from "@/register/RegisterApp"
 import SeeApp from "@/see/SeeApp"
+import TasksDashboardPage from "@/tasks/TasksDashboardPage"
 import { appStore } from "@/register/store"
 import { workspaceStore } from "@/workspace/store"
 
@@ -27,12 +29,16 @@ function WorkspaceOnlyRoute({
 function App() {
   return (
     <BrowserRouter>
-      <Routes>
+      <div className="min-h-full">
+        <Toaster richColors position="bottom-right" />
+        <Routes>
         <Route path="/" element={<WorkspaceDashboard />} />
         <Route path="/workspace" element={<WorkspaceDashboard />} />
         <Route path="/register" element={<WorkspaceOnlyRoute><RegisterApp /></WorkspaceOnlyRoute>} />
         <Route path="/see" element={<WorkspaceOnlyRoute><SeeApp /></WorkspaceOnlyRoute>} />
+        <Route path="/tasks" element={<WorkspaceOnlyRoute><TasksDashboardPage /></WorkspaceOnlyRoute>} />
       </Routes>
+      </div>
     </BrowserRouter>
   )
 }

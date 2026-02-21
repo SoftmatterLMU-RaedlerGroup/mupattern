@@ -138,6 +138,7 @@ declare global {
       }
       workspace: {
         pickDirectory: () => Promise<WorkspacePickResult | null>
+        pickTagsFile: () => Promise<string | null>
         readPositionImage: (
           request: WorkspaceReadPositionImageRequest
         ) => Promise<WorkspaceReadPositionImageResponse>
@@ -149,6 +150,10 @@ declare global {
         hasMasks: (request: ZarrHasMasksRequest) => Promise<ZarrHasMasksResponse>
         loadMaskFrame: (request: ZarrLoadMaskFrameRequest) => Promise<ZarrLoadMaskFrameResponse>
         pickMasksDirectory: () => Promise<{ path: string } | null>
+      }
+      tasks: {
+        pickCropsDestination: () => Promise<{ path: string } | null>
+        hasBboxCsv: (payload: { workspacePath: string; pos: number }) => Promise<boolean>
       }
     }
   }

@@ -652,6 +652,17 @@ function registerWorkspaceStateIpc(): void {
     return saveBboxCsvToWorkspace(payload)
   })
 
+  ipcMain.handle("workspace:pick-tags-file", async (): Promise<string | null> => {
+    const result = await dialog.showOpenDialog({
+      title: "Select tags YAML file",
+      properties: ["openFile"],
+      filters: [{ name: "YAML", extensions: ["yaml", "yml"] }],
+    })
+    if (result.canceled || result.filePaths.length === 0) return null
+    const content = await readFile(result.filePaths[0], "utf-8")
+    return content
+  })
+
   ipcMain.handle("zarr:discover", async (_event, payload: DiscoverZarrRequest) => {
     return discoverZarr(payload)
   })
@@ -671,6 +682,34 @@ function registerWorkspaceStateIpc(): void {
   ipcMain.handle("zarr:pick-masks-dir", async () => {
     return pickMasksDirectory()
   })
+
+  ipcMain.handle("tasks:pick-crops-destination", async () => {
+    const result = await dialog.showOpenDialog({
+      title: "Select folder for crops.zarr",
+      properties: ["openDirectory"],
+    })
+    if (result.canceled || result.filePaths.length === 0) return null
+    return { path: path.join(result.filePaths[0], "crops.zarr") }
+  })
+
+  ipcMain.handle(
+    "tasks:has-bbox-csv",
+    async (
+      _event,
+      payload: { workspacePath: string; pos: number }
+    ): Promise<boolean> => {
+      try {
+        const bboxPath = path.join(
+          payload.workspacePath,
+          `Pos${payload.pos}_bbox.csv`
+        )
+        await access(bboxPath, constants.R_OK)
+        return true
+      } catch {
+        return false
+      }
+    }
+  )
 }
 
 function createWindow(): void {

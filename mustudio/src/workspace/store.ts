@@ -1,4 +1,5 @@
 import { Store } from "@tanstack/store"
+import { parseSliceStringOverValues } from "@/lib/slices"
 
 /** Single workspace backed by a parent folder with Pos{N}/ subdirectories. */
 export interface PositionTag {
@@ -338,6 +339,62 @@ export function clearPositionTagFilters(workspaceId: string) {
     workspaces: s.workspaces.map((w) =>
       w.id === workspaceId ? { ...w, positionFilterLabels: [] } : w
     ),
+  }))
+}
+
+/**
+ * Replace position tags from a dict of label -> slice string.
+ * Merge tags with the same label into contiguous runs.
+ */
+export function setPositionTagsFromDict(
+  workspaceId: string,
+  dict: Record<string, string>
+): void {
+  const ws = workspaceStore.state.workspaces.find((w) => w.id === workspaceId)
+  if (!ws || ws.positions.length === 0) return
+
+  const newTags: PositionTag[] = []
+  for (const [label, sliceStr] of Object.entries(dict)) {
+    const trimmed = label.trim()
+    if (!trimmed) continue
+    let indices: number[]
+    try {
+      indices = parseSliceStringOverValues(sliceStr.trim(), ws.positions)
+    } catch {
+      continue
+    }
+    indices.sort((a, b) => a - b)
+    let runStart = indices[0]
+    let runEnd = indices[0]
+    for (let i = 1; i < indices.length; i += 1) {
+      const idx = indices[i]
+      if (idx === runEnd + 1) {
+        runEnd = idx
+        continue
+      }
+      newTags.push({
+        id: crypto.randomUUID(),
+        label: trimmed,
+        startIndex: runStart,
+        endIndex: runEnd,
+      })
+      runStart = idx
+      runEnd = idx
+    }
+    newTags.push({
+      id: crypto.randomUUID(),
+      label: trimmed,
+      startIndex: runStart,
+      endIndex: runEnd,
+    })
+  }
+
+  workspaceStore.setState((s) => ({
+    ...s,
+    workspaces: s.workspaces.map((w) => {
+      if (w.id !== workspaceId) return w
+      return { ...w, posTags: newTags, positionFilterLabels: [] }
+    }),
   }))
 }
 

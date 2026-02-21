@@ -6,8 +6,8 @@ from pathlib import Path
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from ...common.jobs import get_job_manager
-from ...common.types import JobRecord
+from ...common.tasks import get_task_manager
+from ...common.types import TaskRecord
 from .core import run_convert, run_crop, run_movie
 
 router = APIRouter(tags=["file"])
@@ -41,7 +41,7 @@ class MovieRequest(BaseModel):
 
 
 def _submit(kind: str, payload: dict, fn):
-    mgr = get_job_manager()
+    mgr = get_task_manager()
 
     def runner(request, on_progress, on_log, cancel_event: threading.Event):
         on_log(f"Running {kind}")
@@ -51,8 +51,8 @@ def _submit(kind: str, payload: dict, fn):
     return mgr.submit(kind, payload, runner)
 
 
-@router.post("/jobs/file.convert", response_model=JobRecord)
-def file_convert(req: ConvertRequest) -> JobRecord:
+@router.post("/tasks/file.convert", response_model=TaskRecord)
+def file_convert(req: ConvertRequest) -> TaskRecord:
     def fn(request: dict, on_progress):
         run_convert(
             Path(request["input"]),
@@ -65,8 +65,8 @@ def file_convert(req: ConvertRequest) -> JobRecord:
     return _submit("file.convert", req.model_dump(), fn)
 
 
-@router.post("/jobs/file.crop", response_model=JobRecord)
-def file_crop(req: CropRequest) -> JobRecord:
+@router.post("/tasks/file.crop", response_model=TaskRecord)
+def file_crop(req: CropRequest) -> TaskRecord:
     def fn(request: dict, on_progress):
         run_crop(
             Path(request["input_dir"]),
@@ -80,8 +80,8 @@ def file_crop(req: CropRequest) -> JobRecord:
     return _submit("file.crop", req.model_dump(), fn)
 
 
-@router.post("/jobs/file.movie", response_model=JobRecord)
-def file_movie(req: MovieRequest) -> JobRecord:
+@router.post("/tasks/file.movie", response_model=TaskRecord)
+def file_movie(req: MovieRequest) -> TaskRecord:
     def fn(request: dict, on_progress):
         run_movie(
             Path(request["input_zarr"]),

@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from ..common.types import JobRecord
+from ..common.types import TaskRecord
 
 
-class JobListResponse(BaseModel):
-    jobs: list[JobRecord]
+class TaskListResponse(BaseModel):
+    tasks: list[TaskRecord]
 
 
 class CancelResponse(BaseModel):
-    job_id: str
+    task_id: str
     canceled: bool
