@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import {
   Dialog,
   DialogContent,
@@ -15,6 +15,8 @@ interface CropTaskConfigModalProps {
   workspace: Workspace
   onCreate: (pos: number, destination: string, background: boolean) => void
   positionsWithBbox: number[]
+  /** Pre-select this position when opening (e.g. from context menu). */
+  initialPos?: number
 }
 
 export function CropTaskConfigModal({
@@ -23,13 +25,17 @@ export function CropTaskConfigModal({
   workspace,
   onCreate,
   positionsWithBbox,
+  initialPos,
 }: CropTaskConfigModalProps) {
   const rootPath = workspace.rootPath ?? ""
   const defaultDestination = rootPath ? `${rootPath.replace(/\/$/, "")}/crops.zarr` : ""
 
   const [pos, setPos] = useState<number>(
-    () => positionsWithBbox[0] ?? workspace.positions[0] ?? 0
+    () => initialPos ?? positionsWithBbox[0] ?? workspace.positions[0] ?? 0
   )
+  useEffect(() => {
+    if (open && initialPos != null) setPos(initialPos)
+  }, [open, initialPos])
   const [destination, setDestination] = useState(defaultDestination)
   const [background, setBackground] = useState(false)
 

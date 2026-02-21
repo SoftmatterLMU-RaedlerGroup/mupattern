@@ -153,7 +153,34 @@ declare global {
       }
       tasks: {
         pickCropsDestination: () => Promise<{ path: string } | null>
+        pickMovieOutput: () => Promise<{ path: string } | null>
+        pickSpotsFile: () => Promise<{ path: string } | null>
         hasBboxCsv: (payload: { workspacePath: string; pos: number }) => Promise<boolean>
+        runCrop: (payload: {
+          taskId: string
+          input_dir: string
+          pos: number
+          bbox: string
+          output: string
+          background: boolean
+        }) => Promise<{ ok: true } | { ok: false; error: string }>
+        onCropProgress: (callback: (ev: { taskId: string; progress: number; message: string }) => void) => () => void
+        runMovie: (payload: {
+          taskId: string
+          input_zarr: string
+          pos: number
+          crop: number
+          channel: number
+          time: string
+          output: string
+          fps: number
+          colormap: string
+          spots: string | null
+        }) => Promise<{ ok: true } | { ok: false; error: string }>
+        onMovieProgress: (callback: (ev: { taskId: string; progress: number; message: string }) => void) => () => void
+        insertTask: (task: unknown) => Promise<boolean>
+        updateTask: (id: string, updates: unknown) => Promise<boolean>
+        listTasks: () => Promise<unknown[]>
       }
     }
   }

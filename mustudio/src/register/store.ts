@@ -19,10 +19,16 @@ export interface ImageSource {
   z: number
 }
 
+export interface ImagePixels {
+  rgba: ArrayBuffer
+  width: number
+  height: number
+}
+
 export interface AppState {
   started: boolean
-  /** Data URL of the loaded image, or null if "start fresh" */
-  imageDataURL: string | null
+  /** Raw RGBA pixel buffer (no blob URL); null if "start fresh" */
+  imagePixels: ImagePixels | null
   /** Workspace reference to reload from; not the image data */
   imageSource: ImageSource | null
   imageBaseName: string
@@ -36,7 +42,7 @@ export interface AppState {
 
 const defaultState: AppState = {
   started: false,
-  imageDataURL: null,
+  imagePixels: null,
   imageSource: null,
   imageBaseName: "pattern",
   canvasSize: { width: 2048, height: 2048 },
@@ -51,8 +57,8 @@ export const appStore = createPersistedStore<AppState>("mustudio-register-app", 
   serialize: (state) => ({
     ...state,
     // Never persist image payload; persist imageSource so reload can fetch from workspace
-    imageDataURL: null,
-    started: state.imageDataURL ? true : state.started,
+    imagePixels: null,
+    started: state.imagePixels ? true : state.started,
   }),
   debounceMs: 500,
   deserialize: (raw) => {
@@ -70,7 +76,7 @@ export const appStore = createPersistedStore<AppState>("mustudio-register-app", 
     return {
       ...defaultState,
       ...persisted,
-      imageDataURL: null,
+      imagePixels: null,
       imageSource,
       canvasSize: { ...defaultState.canvasSize, ...(persisted.canvasSize ?? {}) },
       pattern: {
@@ -93,7 +99,7 @@ export const appStore = createPersistedStore<AppState>("mustudio-register-app", 
 // --- Actions ---
 
 export function startWithImage(
-  imageDataURL: string,
+  rgba: ArrayBuffer,
   filename: string,
   width: number,
   height: number,
@@ -102,7 +108,7 @@ export function startWithImage(
   appStore.setState((s) => ({
     ...s,
     started: true,
-    imageDataURL,
+    imagePixels: { rgba, width, height },
     imageSource: imageSource ?? s.imageSource,
     imageBaseName: filename,
     canvasSize: { width, height },
@@ -117,17 +123,8 @@ export function startFresh(width: number, height: number) {
   appStore.setState((s) => ({
     ...s,
     started: true,
-    imageDataURL: null,
+    imagePixels: null,
     imageBaseName: "pattern",
-    canvasSize: { width, height },
-  }))
-}
-
-export function loadImage(imageDataURL: string, filename: string, width: number, height: number) {
-  appStore.setState((s) => ({
-    ...s,
-    imageDataURL,
-    imageBaseName: filename,
     canvasSize: { width, height },
   }))
 }

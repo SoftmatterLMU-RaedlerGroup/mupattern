@@ -81,3 +81,55 @@ export function imageToDataURL(img: HTMLImageElement): string {
   ctx.drawImage(img, 0, 0)
   return canvas.toDataURL("image/png")
 }
+
+/** Load file as raw RGBA pixels. Used for Register (raw-pixel flow, no data URL). */
+export async function loadImagePixelsFromFile(file: File): Promise<{
+  rgba: ArrayBuffer
+  width: number
+  height: number
+  filename: string
+}> {
+  const filename = stripExtension(file.name)
+
+  if (isTiff(file)) {
+    const buffer = await file.arrayBuffer()
+    const ifds = UTIF.decode(buffer)
+    if (ifds.length === 0) {
+      throw new Error("Could not decode TIFF file")
+    }
+    UTIF.decodeImage(buffer, ifds[0])
+    const rgba = UTIF.toRGBA8(ifds[0])
+    const w = ifds[0].width
+    const h = ifds[0].height
+    const copy = new ArrayBuffer(rgba.byteLength)
+    new Uint8Array(copy).set(rgba)
+    return { rgba: copy, width: w, height: h, filename }
+  }
+
+  if (ACCEPTED_TYPES.has(file.type)) {
+    const dataURL = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = () => reject(reader.error)
+      reader.readAsDataURL(file)
+    })
+    return new Promise((resolve, reject) => {
+      const img = new Image()
+      img.onload = () => {
+        const canvas = document.createElement("canvas")
+        canvas.width = img.width
+        canvas.height = img.height
+        const ctx = canvas.getContext("2d")!
+        ctx.drawImage(img, 0, 0)
+        const imageData = ctx.getImageData(0, 0, img.width, img.height)
+        const copy = new ArrayBuffer(imageData.data.byteLength)
+        new Uint8Array(copy).set(imageData.data)
+        resolve({ rgba: copy, width: img.width, height: img.height, filename })
+      }
+      img.onerror = () => reject(new Error("Failed to load image"))
+      img.src = dataURL
+    })
+  }
+
+  throw new Error("Only PNG and TIFF files are accepted")
+}

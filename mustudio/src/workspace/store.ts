@@ -430,32 +430,10 @@ export function hasWorkspace(): boolean {
 }
 
 export interface LoadedWorkspaceImage {
-  src: string
+  rgba: ArrayBuffer
   baseName: string
   width: number
   height: number
-}
-
-async function rgbaToObjectUrl(
-  rgba: ArrayBuffer,
-  width: number,
-  height: number
-): Promise<string> {
-  const canvas = document.createElement("canvas")
-  canvas.width = width
-  canvas.height = height
-  const ctx = canvas.getContext("2d")
-  if (!ctx) throw new Error("Canvas context unavailable")
-  const pixels = new Uint8ClampedArray(rgba)
-  const imageData = new ImageData(pixels, width, height)
-  ctx.putImageData(imageData, 0, 0)
-  const blob = await new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob((result) => {
-      if (result) resolve(result)
-      else reject(new Error("Failed to encode image"))
-    }, "image/png")
-  })
-  return URL.createObjectURL(blob)
 }
 
 /** Read and decode a TIF for the given position using Electron main process I/O. */
@@ -473,9 +451,8 @@ export async function readPositionImage(posNum: number): Promise<LoadedWorkspace
       z: ws.selectedZ,
     })
     if (!result.ok) return null
-    const src = await rgbaToObjectUrl(result.rgba, result.width, result.height)
     return {
-      src,
+      rgba: result.rgba,
       baseName: result.baseName,
       width: result.width,
       height: result.height,

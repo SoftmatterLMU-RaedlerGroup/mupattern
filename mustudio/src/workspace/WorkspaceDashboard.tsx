@@ -1,8 +1,9 @@
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
+import { createPortal } from "react-dom"
 import { useNavigate } from "react-router-dom"
 import { useStore } from "@tanstack/react-store"
 import { Button, HexBackground, ThemeToggle, useTheme } from "@mupattern/shared"
-import { ArrowLeft, Plus } from "lucide-react"
+import { ArrowLeft, Crop, Plus } from "lucide-react"
 import { parse as yamlParse, stringify as yamlStringify } from "yaml"
 import { toast } from "sonner"
 import {
@@ -21,6 +22,8 @@ import {
 } from "@/workspace/store"
 import { parseSliceStringOverValues } from "@/lib/slices"
 import { posTagsToDict } from "@/lib/tags-yaml"
+import { CropTaskConfigModal } from "@/tasks/components/CropTaskConfigModal"
+import { createCropTask } from "@/tasks/lib/create-crop-task"
 
 export default function WorkspaceDashboard() {
   const { theme } = useTheme()
@@ -31,6 +34,10 @@ export default function WorkspaceDashboard() {
   const [error, setError] = useState<string | null>(null)
   const [tagLabel, setTagLabel] = useState("")
   const [tagSlice, setTagSlice] = useState("0")
+  const [cropModalOpen, setCropModalOpen] = useState(false)
+  const [cropModalInitialPos, setCropModalInitialPos] = useState<number | undefined>(undefined)
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; pos: number } | null>(null)
+  const [positionsWithBbox, setPositionsWithBbox] = useState<number[]>([])
 
   const handleAddWorkspace = useCallback(async () => {
     setError(null)
@@ -187,6 +194,51 @@ export default function WorkspaceDashboard() {
 
   const activeWorkspace = activeId ? workspaces.find((w) => w.id === activeId) : null
   const visibleIndices = activeWorkspace ? getWorkspaceVisiblePositionIndices(activeWorkspace) : []
+
+  useEffect(() => {
+    if (!activeWorkspace?.rootPath) {
+      setPositionsWithBbox([])
+      return
+    }
+    const check = async () => {
+      const results = await Promise.all(
+        activeWorkspace.positions.map((pos) =>
+          window.mustudio.tasks.hasBboxCsv({
+            workspacePath: activeWorkspace.rootPath!,
+            pos,
+          })
+        )
+      )
+      setPositionsWithBbox(activeWorkspace.positions.filter((_, i) => results[i]))
+    }
+    void check()
+  }, [activeWorkspace])
+
+  useEffect(() => {
+    if (!contextMenu) return
+    const close = (e: MouseEvent) => {
+      if ((e.target as HTMLElement).closest("[data-context-menu]")) return
+      setContextMenu(null)
+    }
+    window.addEventListener("click", close)
+    return () => window.removeEventListener("click", close)
+  }, [contextMenu])
+
+  const handleCreateCrop = useCallback(
+    async (pos: number, destination: string, background: boolean) => {
+      if (!activeWorkspace?.rootPath) return
+      setCropModalOpen(false)
+      setContextMenu(null)
+      await createCropTask({
+        input_dir: activeWorkspace.rootPath,
+        pos,
+        bbox: `${activeWorkspace.rootPath}/Pos${pos}_bbox.csv`,
+        output: destination,
+        background,
+      })
+    },
+    [activeWorkspace]
+  )
   const filterLabels = activeWorkspace
     ? [...new Set(activeWorkspace.posTags.map((tag) => tag.label))].sort((a, b) => a.localeCompare(b))
     : []
@@ -279,6 +331,10 @@ export default function WorkspaceDashboard() {
                     <div
                       key={pos}
                       onClick={() => handlePositionSelect(activeWorkspace, i)}
+                      onContextMenu={(e) => {
+                        e.preventDefault()
+                        setContextMenu({ x: e.clientX, y: e.clientY, pos })
+                      }}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault()
@@ -326,6 +382,31 @@ export default function WorkspaceDashboard() {
                 })}
               </div>
             </div>
+
+            {contextMenu &&
+              createPortal(
+                <div
+                  data-context-menu
+                  className="fixed z-[9999] border rounded bg-background shadow-lg py-1 min-w-[160px]"
+                  style={{ left: contextMenu.x, top: contextMenu.y }}
+                >
+                  <button
+                    type="button"
+                    className="w-full text-left px-4 py-2 hover:bg-accent text-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={!positionsWithBbox.includes(contextMenu.pos)}
+                    onClick={() => {
+                      setCropModalInitialPos(contextMenu.pos)
+                      setContextMenu(null)
+                      setCropModalOpen(true)
+                    }}
+                  >
+                    <Crop className="size-4" />
+                    Crop
+                  </button>
+                </div>,
+                document.body
+              )}
+
             <div className="flex justify-between items-center gap-4">
               <div className="flex items-center gap-2">
                 <Button
@@ -404,6 +485,21 @@ export default function WorkspaceDashboard() {
 
         {error && <p className="text-destructive text-sm">{error}</p>}
       </div>
+
+      {activeWorkspace && (
+        <CropTaskConfigModal
+          key={activeWorkspace.id}
+          open={cropModalOpen}
+          onClose={() => {
+            setCropModalOpen(false)
+            setCropModalInitialPos(undefined)
+          }}
+          workspace={activeWorkspace}
+          onCreate={handleCreateCrop}
+          positionsWithBbox={positionsWithBbox}
+          initialPos={cropModalInitialPos}
+        />
+      )}
     </div>
   )
 }

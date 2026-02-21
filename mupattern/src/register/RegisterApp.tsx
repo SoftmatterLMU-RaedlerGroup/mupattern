@@ -25,42 +25,27 @@ import { detectGridPoints, fitGrid } from "@mupattern/shared/register/lib/autode
 import { pixelsToUm } from "@mupattern/shared/register/lib/units"
 import { normalizeImageDataForDisplay } from "@mupattern/shared/register/lib/normalize"
 
-/** Convert a data URL to an HTMLImageElement (async). */
-function useImageFromDataURL(dataURL: string | null): HTMLImageElement | null {
-  const [img, setImg] = useState<HTMLImageElement | null>(null)
-
-  useEffect(() => {
-    if (!dataURL) {
-      setImg(null)
-      return
-    }
-    const image = new Image()
-    image.onload = () => setImg(image)
-    image.src = dataURL
-  }, [dataURL])
-
-  return img
-}
-
-/** Normalize phase contrast once; returns canvas with mutated (in-place) normalized pixels. Used for display and detection. */
-function useNormalizedPhaseContrast(phaseContrast: HTMLImageElement | null): HTMLCanvasElement | null {
+/** Normalize phase contrast once; returns canvas. Accepts ImageData (raw pixels) directly. */
+function useNormalizedPhaseContrast(
+  rawImageData: ImageData | null
+): HTMLCanvasElement | null {
   const [normalized, setNormalized] = useState<HTMLCanvasElement | null>(null)
 
   useEffect(() => {
-    if (!phaseContrast) {
+    if (!rawImageData) {
       setNormalized(null)
       return
     }
     const canvas = document.createElement("canvas")
-    canvas.width = phaseContrast.width
-    canvas.height = phaseContrast.height
+    canvas.width = rawImageData.width
+    canvas.height = rawImageData.height
     const ctx = canvas.getContext("2d")!
-    ctx.drawImage(phaseContrast, 0, 0)
-    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    ctx.putImageData(rawImageData, 0, 0)
+    const imgData = ctx.getImageData(0, 0, rawImageData.width, rawImageData.height)
     normalizeImageDataForDisplay(imgData)
     ctx.putImageData(imgData, 0, 0)
     setNormalized(canvas)
-  }, [phaseContrast])
+  }, [rawImageData])
 
   return normalized
 }
@@ -76,7 +61,7 @@ export default function RegisterApp() {
   }, [])
 
   const started = useStore(mupatternStore, (s) => s.register.started)
-  const imageDataURL = useStore(mupatternStore, (s) => s.register.imageDataURL)
+  const imagePixels = useStore(mupatternStore, (s) => s.register.imagePixels)
   const imageBaseName = useStore(mupatternStore, (s) => s.register.imageBaseName)
   const canvasSize = useStore(mupatternStore, (s) => s.register.canvasSize)
   const pattern = useStore(mupatternStore, (s) => s.register.pattern)
@@ -85,8 +70,18 @@ export default function RegisterApp() {
   const patternOpacity = useStore(mupatternStore, (s) => s.register.patternOpacity)
   const detectedPoints = useStore(mupatternStore, (s) => s.register.detectedPoints)
 
-  const phaseContrast = useImageFromDataURL(imageDataURL)
-  const normalizedPhaseContrast = useNormalizedPhaseContrast(phaseContrast)
+  const rawImageData = useMemo(
+    () =>
+      imagePixels
+        ? new ImageData(
+            new Uint8ClampedArray(imagePixels.rgba),
+            imagePixels.width,
+            imagePixels.height
+          )
+        : null,
+    [imagePixels]
+  )
+  const normalizedPhaseContrast = useNormalizedPhaseContrast(rawImageData)
 
   const patternPx = useMemo(
     () => patternToPixels(pattern, calibration),
@@ -151,7 +146,7 @@ export default function RegisterApp() {
       />
       <div className="flex flex-1 min-h-0">
         <LeftSidebar
-          hasImage={!!phaseContrast}
+          hasImage={!!rawImageData}
           hasDetectedPoints={!!detectedPoints && detectedPoints.length > 0}
           onDetect={handleDetect}
           onFitGrid={handleFitGrid}

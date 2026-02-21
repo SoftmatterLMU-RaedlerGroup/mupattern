@@ -108,5 +108,6 @@ export function useZarrStore() {
     index,
     loading,
     error,
+    activeWorkspace,
   };
 }

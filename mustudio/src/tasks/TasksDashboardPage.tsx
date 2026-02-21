@@ -1,17 +1,25 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useStore } from "@tanstack/react-store"
 import { Button, HexBackground, ThemeToggle, useTheme } from "@mupattern/shared"
 import { ArrowLeft, Plus } from "lucide-react"
 import { workspaceStore } from "@/workspace/store"
-import {
-  healthCheck,
-  cropTask,
-  cancelTask,
-  taskStream,
-  type TaskRecord,
-} from "@/backend/api"
 import { CropTaskConfigModal } from "@/tasks/components/CropTaskConfigModal"
+import { MovieTaskConfigModal } from "@/tasks/components/MovieTaskConfigModal"
+
+interface TaskRecord {
+  id: string
+  kind: string
+  status: "queued" | "running" | "succeeded" | "failed" | "canceled"
+  created_at: string
+  started_at: string | null
+  finished_at: string | null
+  request: Record<string, unknown>
+  result: Record<string, unknown> | null
+  error: string | null
+  logs: string[]
+  progress_events: Array<{ progress: number; message: string; timestamp: string }>
+}
 
 export default function TasksDashboardPage() {
   const { theme } = useTheme()
@@ -19,12 +27,30 @@ export default function TasksDashboardPage() {
   const workspaces = useStore(workspaceStore, (s) => s.workspaces)
   const activeId = useStore(workspaceStore, (s) => s.activeId)
 
-  const [apiReachable, setApiReachable] = useState<boolean | null>(null)
   const [tasks, setTasks] = useState<TaskRecord[]>([])
   const [addMenuOpen, setAddMenuOpen] = useState(false)
   const [cropModalOpen, setCropModalOpen] = useState(false)
+  const [movieModalOpen, setMovieModalOpen] = useState(false)
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const progressUnsubscribeRef = useRef<(() => void) | null>(null)
+
+  useEffect(() => {
+    window.mustudio.tasks.listTasks().then((list) => {
+      setTasks(list as unknown as TaskRecord[])
+    })
+  }, [])
+
+  const hasRunningTasks = tasks.some((t) => t.status === "running")
+  useEffect(() => {
+    if (!hasRunningTasks) return
+    const id = setInterval(() => {
+      window.mustudio.tasks.listTasks().then((list) => {
+        setTasks(list as unknown as TaskRecord[])
+      })
+    }, 2000)
+    return () => clearInterval(id)
+  }, [hasRunningTasks])
 
   const activeWorkspace = useMemo(
     () => (activeId ? workspaces.find((w) => w.id === activeId) ?? null : null),
@@ -56,72 +82,183 @@ export default function TasksDashboardPage() {
     void check()
   }, [activeWorkspace])
 
-  useEffect(() => {
-    const check = async () => {
-      const ok = await healthCheck()
-      setApiReachable(ok)
-    }
-    void check()
-    const id = setInterval(check, 5000)
-    return () => clearInterval(id)
-  }, [])
-
   const handleCreateCrop = useCallback(
     async (pos: number, destination: string, background: boolean) => {
       if (!activeWorkspace?.rootPath) return
       setError(null)
+      const taskId = crypto.randomUUID()
+      const task: TaskRecord = {
+        id: taskId,
+        kind: "file.crop",
+        status: "running",
+        created_at: new Date().toISOString(),
+        started_at: new Date().toISOString(),
+        finished_at: null,
+        request: { pos, output: destination, background },
+        result: null,
+        error: null,
+        logs: [],
+        progress_events: [],
+      }
+      await window.mustudio.tasks.insertTask(task as unknown)
+      setTasks((prev) => [task, ...prev])
+      setSelectedTaskId(taskId)
+      setCropModalOpen(false)
+      setAddMenuOpen(false)
+
+      progressUnsubscribeRef.current = window.mustudio.tasks.onCropProgress((ev) => {
+        if (ev.taskId !== taskId) return
+        setTasks((prev) =>
+          prev.map((t) => {
+            if (t.id !== taskId) return t
+            return {
+              ...t,
+              progress_events: [
+                ...t.progress_events,
+                {
+                  progress: ev.progress,
+                  message: ev.message,
+                  timestamp: new Date().toISOString(),
+                },
+              ],
+            }
+          })
+        )
+      })
+
       try {
-        const bbox = `${activeWorkspace.rootPath}/Pos${pos}_bbox.csv`
-        const task = await cropTask({
+        const result = await window.mustudio.tasks.runCrop({
+          taskId,
           input_dir: activeWorkspace.rootPath,
           pos,
-          bbox,
+          bbox: `${activeWorkspace.rootPath}/Pos${pos}_bbox.csv`,
           output: destination,
           background,
         })
-        setTasks((prev) => [task, ...prev])
-        setSelectedTaskId(task.id)
-        setCropModalOpen(false)
-        setAddMenuOpen(false)
-
-        taskStream(task.id, (ev) => {
-          setTasks((prev) =>
-            prev.map((t) => {
-              if (t.id !== task.id) return t
-              if ("done" in ev) {
-                return { ...t, status: ev.status as TaskRecord["status"] }
-              }
-              return {
-                ...t,
-                progress_events: [
-                  ...t.progress_events,
-                  {
-                    progress: ev.progress,
-                    message: ev.message,
-                    timestamp: new Date().toISOString(),
-                  },
-                ],
-              }
-            })
-          )
-        })
+        progressUnsubscribeRef.current?.()
+        progressUnsubscribeRef.current = null
+        setTasks((prev) =>
+          prev.map((t) => {
+            if (t.id !== taskId) return t
+            return {
+              ...t,
+              status: result.ok ? "succeeded" : "failed",
+              finished_at: new Date().toISOString(),
+              error: result.ok ? null : result.error,
+            }
+          })
+        )
       } catch (e) {
+        progressUnsubscribeRef.current?.()
+        progressUnsubscribeRef.current = null
         setError(e instanceof Error ? e.message : String(e))
+        setTasks((prev) =>
+          prev.map((t) => {
+            if (t.id !== taskId) return t
+            return {
+              ...t,
+              status: "failed",
+              finished_at: new Date().toISOString(),
+              error: e instanceof Error ? e.message : String(e),
+            }
+          })
+        )
       }
     },
     [activeWorkspace]
   )
 
-  const handleCancelTask = useCallback(async (taskId: string) => {
-    try {
-      await cancelTask(taskId)
-      setTasks((prev) =>
-        prev.map((t) => (t.id === taskId ? { ...t, status: "canceled" as const } : t))
-      )
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    }
-  }, [])
+  const handleCreateMovie = useCallback(
+    async (params: {
+      input_zarr: string
+      pos: number
+      crop: number
+      channel: number
+      time: string
+      output: string
+      fps: number
+      colormap: string
+      spots: string | null
+    }) => {
+      if (!activeWorkspace?.rootPath) return
+      setError(null)
+      const taskId = crypto.randomUUID()
+      const task: TaskRecord = {
+        id: taskId,
+        kind: "file.movie",
+        status: "running",
+        created_at: new Date().toISOString(),
+        started_at: new Date().toISOString(),
+        finished_at: null,
+        request: params,
+        result: null,
+        error: null,
+        logs: [],
+        progress_events: [],
+      }
+      await window.mustudio.tasks.insertTask(task as unknown)
+      setTasks((prev) => [task, ...prev])
+      setSelectedTaskId(taskId)
+      setMovieModalOpen(false)
+      setAddMenuOpen(false)
+
+      progressUnsubscribeRef.current = window.mustudio.tasks.onMovieProgress((ev) => {
+        if (ev.taskId !== taskId) return
+        setTasks((prev) =>
+          prev.map((t) => {
+            if (t.id !== taskId) return t
+            return {
+              ...t,
+              progress_events: [
+                ...t.progress_events,
+                {
+                  progress: ev.progress,
+                  message: ev.message,
+                  timestamp: new Date().toISOString(),
+                },
+              ],
+            }
+          })
+        )
+      })
+
+      try {
+        const result = await window.mustudio.tasks.runMovie({
+          taskId,
+          ...params,
+        })
+        progressUnsubscribeRef.current?.()
+        progressUnsubscribeRef.current = null
+        setTasks((prev) =>
+          prev.map((t) => {
+            if (t.id !== taskId) return t
+            return {
+              ...t,
+              status: result.ok ? "succeeded" : "failed",
+              finished_at: new Date().toISOString(),
+              error: result.ok ? null : result.error,
+            }
+          })
+        )
+      } catch (e) {
+        progressUnsubscribeRef.current?.()
+        progressUnsubscribeRef.current = null
+        setError(e instanceof Error ? e.message : String(e))
+        setTasks((prev) =>
+          prev.map((t) => {
+            if (t.id !== taskId) return t
+            return {
+              ...t,
+              status: "failed",
+              finished_at: new Date().toISOString(),
+              error: e instanceof Error ? e.message : String(e),
+            }
+          })
+        )
+      }
+    },
+    [activeWorkspace]
+  )
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -153,16 +290,10 @@ export default function TasksDashboardPage() {
                 Workspace: {activeWorkspace.name} ({activeWorkspace.rootPath})
               </p>
 
-              {apiReachable === false && (
-                <p className="text-sm text-destructive">
-                  Cannot reach muapplication API. Run: uv run muapplication serve --dev
-                </p>
-              )}
-
               <div className="relative">
                 <Button
                   onClick={() => setAddMenuOpen((o) => !o)}
-                  disabled={!apiReachable || !positionsWithBboxResolved.length}
+                  disabled={!activeWorkspace}
                 >
                   <Plus className="size-4 mr-2" />
                   Add task
@@ -178,6 +309,16 @@ export default function TasksDashboardPage() {
                       }}
                     >
                       Crop
+                    </button>
+                    <button
+                      type="button"
+                      className="w-full text-left px-4 py-2 hover:bg-accent text-sm"
+                      onClick={() => {
+                        setMovieModalOpen(true)
+                        setAddMenuOpen(false)
+                      }}
+                    >
+                      Movie
                     </button>
                   </div>
                 )}
@@ -225,15 +366,6 @@ export default function TasksDashboardPage() {
                             >
                               {task.status}
                             </span>
-                            {task.status === "running" && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleCancelTask(task.id)}
-                              >
-                                Cancel
-                              </Button>
-                            )}
                             {task.status === "succeeded" && (
                               <Button
                                 variant="outline"
@@ -280,14 +412,23 @@ export default function TasksDashboardPage() {
       </div>
 
       {activeWorkspace && (
-        <CropTaskConfigModal
-          key={activeWorkspace.id}
-          open={cropModalOpen}
-          onClose={() => setCropModalOpen(false)}
-          workspace={activeWorkspace}
-          onCreate={handleCreateCrop}
-          positionsWithBbox={positionsWithBboxResolved}
-        />
+        <>
+          <CropTaskConfigModal
+            key={activeWorkspace.id}
+            open={cropModalOpen}
+            onClose={() => setCropModalOpen(false)}
+            workspace={activeWorkspace}
+            onCreate={handleCreateCrop}
+            positionsWithBbox={positionsWithBboxResolved}
+          />
+          <MovieTaskConfigModal
+            key={activeWorkspace.id}
+            open={movieModalOpen}
+            onClose={() => setMovieModalOpen(false)}
+            workspace={activeWorkspace}
+            onCreate={handleCreateMovie}
+          />
+        </>
       )}
     </div>
   )

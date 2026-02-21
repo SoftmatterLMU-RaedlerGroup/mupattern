@@ -18,9 +18,16 @@ import { normalizeAngleRad } from "@mupattern/shared/register/lib/units"
 
 // --- Register slice ---
 
+export interface ImagePixels {
+  rgba: ArrayBuffer
+  width: number
+  height: number
+}
+
 export interface RegisterState {
   started: boolean
-  imageDataURL: string | null
+  /** Raw RGBA pixel buffer; null if "start fresh" */
+  imagePixels: ImagePixels | null
   imageBaseName: string
   canvasSize: { width: number; height: number }
   pattern: PatternConfigUm
@@ -32,7 +39,7 @@ export interface RegisterState {
 
 const defaultRegister: RegisterState = {
   started: false,
-  imageDataURL: null,
+  imagePixels: null,
   imageBaseName: "pattern",
   canvasSize: { width: 2048, height: 2048 },
   pattern: DEFAULT_PATTERN_UM,
@@ -91,7 +98,7 @@ export const mupatternStore = new Store<MupatternState>(defaultState)
 // --- Register actions ---
 
 export function startWithImage(
-  imageDataURL: string,
+  rgba: ArrayBuffer,
   filename: string,
   width: number,
   height: number
@@ -101,7 +108,7 @@ export function startWithImage(
     register: {
       ...s.register,
       started: true,
-      imageDataURL,
+      imagePixels: { rgba, width, height },
       imageBaseName: filename,
       canvasSize: { width, height },
     },

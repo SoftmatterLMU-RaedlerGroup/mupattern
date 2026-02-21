@@ -27,7 +27,7 @@ export async function reloadActiveWorkspaceImage(): Promise<{ ok: true; source: 
     time: ws.selectedTime,
     z: ws.selectedZ,
   }
-  startWithImage(loaded.src, loaded.baseName, loaded.width, loaded.height, source)
+  startWithImage(loaded.rgba, loaded.baseName, loaded.width, loaded.height, source)
   clearDetectedPoints()
   return { ok: true, source }
 }
@@ -50,7 +50,7 @@ export async function loadImageFromSource(source: ImageSource): Promise<{ ok: tr
   if (!loaded) {
     return { ok: false, error: "Could not read file from workspace." }
   }
-  startWithImage(loaded.src, loaded.baseName, loaded.width, loaded.height, source)
+  startWithImage(loaded.rgba, loaded.baseName, loaded.width, loaded.height, source)
   clearDetectedPoints()
   return { ok: true }
 }

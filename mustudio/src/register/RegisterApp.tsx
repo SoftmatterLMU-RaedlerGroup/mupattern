@@ -26,46 +26,26 @@ import { normalizeImageDataForDisplayAsync } from "@/register/lib/normalize" // 
 import { loadImageFromSource, reloadActiveWorkspaceImage } from "@/register/lib/workspace-image"
 import { workspaceStore } from "@/workspace/store"
 
-/** Convert a data URL to an HTMLImageElement (async). */
-function useImageFromDataURL(dataURL: string | null): HTMLImageElement | null {
-  const [img, setImg] = useState<HTMLImageElement | null>(null)
-
-  useEffect(() => {
-    if (!dataURL) {
-      setImg(null)
-      return
-    }
-    const image = new Image()
-    image.onload = () => setImg(image)
-    image.src = dataURL
-    return () => {
-      if (dataURL.startsWith("blob:")) {
-        URL.revokeObjectURL(dataURL)
-      }
-    }
-  }, [dataURL])
-
-  return img
-}
-
-/** Normalize phase contrast once; returns canvas with mutated (in-place) normalized pixels. Used for display and detection. */
-function useNormalizedPhaseContrast(phaseContrast: HTMLImageElement | null): HTMLCanvasElement | null {
+/** Normalize phase contrast once; returns canvas. Accepts ImageData (raw pixels) directly—no blob URL or Image element. */
+function useNormalizedPhaseContrast(
+  rawImageData: ImageData | null
+): HTMLCanvasElement | null {
   const [normalized, setNormalized] = useState<HTMLCanvasElement | null>(null)
 
   useEffect(() => {
     let cancelled = false
-    if (!phaseContrast) {
+    if (!rawImageData) {
       setNormalized(null)
       return
     }
 
     const run = async () => {
       const canvas = document.createElement("canvas")
-      canvas.width = phaseContrast.width
-      canvas.height = phaseContrast.height
+      canvas.width = rawImageData.width
+      canvas.height = rawImageData.height
       const ctx = canvas.getContext("2d")!
-      ctx.drawImage(phaseContrast, 0, 0)
-      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      ctx.putImageData(rawImageData, 0, 0)
+      const imgData = ctx.getImageData(0, 0, rawImageData.width, rawImageData.height)
       const normalizedData = await normalizeImageDataForDisplayAsync(imgData)
       if (cancelled) return
       ctx.putImageData(normalizedData, 0, 0)
@@ -81,13 +61,13 @@ function useNormalizedPhaseContrast(phaseContrast: HTMLImageElement | null): HTM
     return () => {
       cancelled = true
     }
-  }, [phaseContrast])
+  }, [rawImageData])
 
   return normalized
 }
 
 export default function RegisterApp() {
-  const imageDataURL = useStore(appStore, (s) => s.imageDataURL)
+  const imagePixels = useStore(appStore, (s) => s.imagePixels)
   const imageSource = useStore(appStore, (s) => s.imageSource)
   const imageBaseName = useStore(appStore, (s) => s.imageBaseName)
   const canvasSize = useStore(appStore, (s) => s.canvasSize)
@@ -99,26 +79,40 @@ export default function RegisterApp() {
   const [workspaceImageError, setWorkspaceImageError] = useState<string | null>(null)
   const hasWorkspace = useStore(workspaceStore, (s) => !!(s.activeId && s.workspaces.some((w) => w.id === s.activeId)))
 
-  // Auto-load image when none is loaded: prefer imageSource (reload) else active workspace (navigate)
+  const rawImageData = useMemo(
+    () =>
+      imagePixels
+        ? new ImageData(
+            new Uint8ClampedArray(imagePixels.rgba),
+            imagePixels.width,
+            imagePixels.height
+          )
+        : null,
+    [imagePixels]
+  )
+
+  // Auto-load image when none is loaded: prefer active workspace (navigate from dashboard), else imageSource (page refresh)
   useEffect(() => {
-    if (imageDataURL) return
+    if (imagePixels) return
     const load = async () => {
+      if (hasWorkspace) {
+        const r = await reloadActiveWorkspaceImage()
+        if (r.ok) {
+          setWorkspaceImageError(null)
+          return
+        }
+        setWorkspaceImageError(r.error)
+      }
       if (imageSource) {
         const r = await loadImageFromSource(imageSource)
         if (r.ok) setWorkspaceImageError(null)
         else setWorkspaceImageError(r.error)
-        return
       }
-      if (!hasWorkspace) return
-      const r = await reloadActiveWorkspaceImage()
-      if (r.ok) setWorkspaceImageError(null)
-      else setWorkspaceImageError(r.error)
     }
     void load()
-  }, [imageDataURL, imageSource, hasWorkspace])
+  }, [imagePixels, imageSource, hasWorkspace])
 
-  const phaseContrast = useImageFromDataURL(imageDataURL)
-  const normalizedPhaseContrast = useNormalizedPhaseContrast(phaseContrast)
+  const normalizedPhaseContrast = useNormalizedPhaseContrast(rawImageData)
 
   const patternPx = useMemo(
     () => patternToPixels(pattern, calibration),
@@ -173,7 +167,7 @@ export default function RegisterApp() {
           canvasSize={canvasSize}
           patternPx={patternPx}
           transform={transform}
-          hasImage={!!phaseContrast}
+          hasImage={!!rawImageData}
           hasDetectedPoints={!!detectedPoints && detectedPoints.length > 0}
           onDetect={handleDetect}
           onFitGrid={handleFitGrid}

@@ -46,16 +46,20 @@ import {
   Eye,
   EyeOff,
   Crosshair,
+  Film,
 } from "lucide-react";
+import { toast } from "sonner";
 
 const PAGE_SIZE = 9; // 3x3
 
 interface ViewerProps {
   store: ZarrStore;
   index: StoreIndex;
+  /** Opens movie task config modal instead of creating with defaults. */
+  onSaveAsMovie?: (pos: string, cropId: string) => void;
 }
 
-export function Viewer({ store, index }: ViewerProps) {
+export function Viewer({ store, index, onSaveAsMovie }: ViewerProps) {
   // Persisted state from store
   const selectedPos = useStore(viewerStore, (s) => s.selectedPos);
   const t = useStore(viewerStore, (s) => s.t);
@@ -87,6 +91,7 @@ export function Viewer({ store, index }: ViewerProps) {
   // Ephemeral state
   const [playing, setPlaying] = useState(false);
   const [frameLoadError, setFrameLoadError] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; crop: CropInfo } | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
   const [workspaceHasMasks, setWorkspaceHasMasks] = useState(false);
   const [autoContrastDone, setAutoContrastDone] = useState(
@@ -351,6 +356,33 @@ export function Viewer({ store, index }: ViewerProps) {
     }
   }, []);
 
+  const handleSaveAsMovie = useCallback(
+    (crop: CropInfo) => {
+      setContextMenu(null);
+      if (onSaveAsMovie) {
+        onSaveAsMovie(validPos, crop.cropId);
+        return;
+      }
+      if (!store.workspacePath) {
+        toast.error("No workspace path");
+        return;
+      }
+      toast.error("Movie task config unavailable");
+    },
+    [store.workspacePath, validPos, onSaveAsMovie]
+  );
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.closest("[data-context-menu]")) return;
+      setContextMenu(null);
+    };
+    window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
+  }, [contextMenu]);
+
   // Build set of cropIds that have any annotation (at any timepoint) for current position
   const annotatedCrops = useMemo(() => {
     const s = new Set<string>();
@@ -470,6 +502,10 @@ export function Viewer({ store, index }: ViewerProps) {
                 key={canvasKey(crop.posId, crop.cropId)}
                 className={`relative rounded-sm ${annotating ? "cursor-crosshair" : ""} ${borderClass(crop.cropId)}`}
                 onClick={annotating ? () => handleAnnotate(crop.cropId) : undefined}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setContextMenu({ x: e.clientX, y: e.clientY, crop });
+                }}
               >
                 <canvas
                   ref={setCanvasRef(canvasKey(crop.posId, crop.cropId))}
@@ -594,6 +630,24 @@ export function Viewer({ store, index }: ViewerProps) {
           </div>
         </aside>
       </div>
+
+      {/* Crop context menu */}
+      {contextMenu && (
+        <div
+          data-context-menu
+          className="fixed z-50 border rounded bg-background shadow-lg py-1 min-w-[160px]"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+        >
+          <button
+            type="button"
+            className="w-full text-left px-4 py-2 hover:bg-accent text-sm flex items-center gap-2"
+            onClick={() => handleSaveAsMovie(contextMenu.crop)}
+          >
+            <Film className="size-4" />
+            Save as movie
+          </button>
+        </div>
+      )}
 
       {/* Pagination */}
       <div className="flex items-center justify-center gap-4 px-4 py-2 border-t">

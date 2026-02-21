@@ -2,7 +2,7 @@ import { useState, useCallback, useRef } from "react"
 import { useNavigate } from "react-router-dom"
 import { Button, HexBackground, ThemeToggle, useTheme } from "@mupattern/shared"
 import { Microscope, Eye } from "lucide-react"
-import { loadImageFile, imageToDataURL } from "@/lib/load-image"
+import { loadImagePixelsFromFile } from "@/lib/load-image"
 import { startWithImage } from "@/register/store"
 import { setSeeSession } from "@/lib/see-session"
 import { DirectoryStore } from "@/see/lib/directory-store"
@@ -25,9 +25,8 @@ export default function Landing() {
       setRegisterLoading(true)
       setRegisterError(null)
       try {
-        const { image, filename } = await loadImageFile(file)
-        const dataURL = imageToDataURL(image)
-        startWithImage(dataURL, filename, image.width, image.height)
+        const { rgba, width, height, filename } = await loadImagePixelsFromFile(file)
+        startWithImage(rgba, filename, width, height)
         navigate("/register")
       } catch (err) {
         setRegisterError(err instanceof Error ? err.message : String(err))
