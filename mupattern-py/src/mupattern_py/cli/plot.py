@@ -47,11 +47,15 @@ def kill(
         ),
     ],
     output: Annotated[Path, typer.Option(help="Output plot image path (e.g. plot.png).")],
+    bin_width: Annotated[
+        int,
+        typer.Option("--bin-width", help="Histogram bin width in frames (default 5)."),
+    ] = 5,
 ) -> None:
-    """Plot kill curve: number of present cells over time."""
+    """Plot kill curve (n alive) and death time distribution. Uses same clean logic as desktop KillTab."""
     df = _load_kill_csv(input)
     typer.echo(f"Loaded {len(df)} predictions, {df['crop'].nunique()} crops, t=0..{df['t'].max()}")
-    run_kill_plot(input, output)
+    run_kill_plot(input, output, bin_width=bin_width)
     typer.echo(f"Saved plot to {output}")
     violations = _find_violations(df)
     if len(violations) > 0:

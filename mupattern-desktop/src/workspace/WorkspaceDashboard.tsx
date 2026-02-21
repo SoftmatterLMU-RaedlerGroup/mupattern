@@ -289,7 +289,7 @@ export default function WorkspaceDashboard() {
       <div className="w-full max-w-2xl space-y-4 backdrop-blur-sm bg-background/80 rounded-lg border p-6">
         <div className="text-center">
           <h1 className="text-4xl tracking-tight" style={{ fontFamily: '"Bitcount", monospace' }}>
-            MuStudio
+            MuPattern
           </h1>
           <div className="mt-3 border-t border-border/70" />
         </div>

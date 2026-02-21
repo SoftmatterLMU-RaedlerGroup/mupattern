@@ -168,5 +168,14 @@ contextBridge.exposeInMainWorld("mupatternDesktop", {
           }
         | { ok: false; error: string }
       >,
+    listKillCsv: (workspacePath: string) =>
+      ipcRenderer.invoke("application:list-kill-csv", workspacePath) as Promise<
+        Array<{ posId: string; path: string }>
+      >,
+    loadKillCsv: (path: string) =>
+      ipcRenderer.invoke("application:load-kill-csv", path) as Promise<
+        | { ok: true; rows: Array<{ t: number; crop: string; label: boolean }> }
+        | { ok: false; error: string }
+      >,
   },
 });

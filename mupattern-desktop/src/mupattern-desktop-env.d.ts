@@ -257,6 +257,13 @@ declare global {
             }
           | { ok: false; error: string }
         >;
+        listKillCsv: (workspacePath: string) => Promise<
+          Array<{ posId: string; path: string }>
+        >;
+        loadKillCsv: (path: string) => Promise<
+          | { ok: true; rows: Array<{ t: number; crop: string; label: boolean }> }
+          | { ok: false; error: string }
+        >;
       };
     };
   }
