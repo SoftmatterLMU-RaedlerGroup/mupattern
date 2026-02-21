@@ -138,6 +138,7 @@ export function ExpressionTab({ workspace: _workspace, rows }: ExpressionTabProp
                       dot={false}
                       connectNulls
                       isAnimationActive={false}
+                      legendType="line"
                     />
                     <Legend align="left" verticalAlign="top" />
                   </LineChart>

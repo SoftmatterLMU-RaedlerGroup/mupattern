@@ -105,6 +105,7 @@ def run_plot(input_csv: Path, output: Path) -> None:
     ax.set_ylabel("fluorescence")
     ax.set_title("Background-corrected total fluorescence")
     ax.set_xlabel("t")
+    ax.legend(loc="upper left")
     _style_ax(ax)
     plt.tight_layout()
     plt.savefig(output, dpi=150, bbox_inches="tight")
