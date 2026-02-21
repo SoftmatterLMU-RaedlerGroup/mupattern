@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -6,20 +6,20 @@ import {
   DialogTitle,
   DialogFooter,
   Button,
-} from "@mupattern/shared"
-import { discoverStore } from "@/see/lib/zarr"
-import type { Workspace } from "@/workspace/store"
+} from "@mupattern/shared";
+import { discoverStore } from "@/see/lib/zarr";
+import type { Workspace } from "@/workspace/store";
 
 interface ExpressionTaskConfigModalProps {
-  open: boolean
-  onClose: () => void
-  workspace: Workspace
+  open: boolean;
+  onClose: () => void;
+  workspace: Workspace;
   onCreate: (params: {
-    workspacePath: string
-    pos: number
-    channel: number
-    output: string
-  }) => void
+    workspacePath: string;
+    pos: number;
+    channel: number;
+    output: string;
+  }) => void;
 }
 
 export function ExpressionTaskConfigModal({
@@ -28,58 +28,60 @@ export function ExpressionTaskConfigModal({
   workspace,
   onCreate,
 }: ExpressionTaskConfigModalProps) {
-  const rootPath = workspace.rootPath ?? ""
-  const [positions, setPositions] = useState<string[]>([])
-  const [cropsByPos, setCropsByPos] = useState<Map<string, Array<{ posId: string; cropId: string; shape: number[] }>>>(new Map())
-  const [loading, setLoading] = useState(false)
-  const [pos, setPos] = useState<string>("000")
-  const [channel, setChannel] = useState(0)
-  const posIdUnpadded = pos ? String(Number.parseInt(pos, 10)) : ""
+  const rootPath = workspace.rootPath ?? "";
+  const [positions, setPositions] = useState<string[]>([]);
+  const [cropsByPos, setCropsByPos] = useState<
+    Map<string, Array<{ posId: string; cropId: string; shape: number[] }>>
+  >(new Map());
+  const [loading, setLoading] = useState(false);
+  const [pos, setPos] = useState<string>("000");
+  const [channel, setChannel] = useState(0);
+  const posIdUnpadded = pos ? String(Number.parseInt(pos, 10)) : "";
   const defaultOutput =
-    rootPath && pos
-      ? `${rootPath.replace(/\/$/, "")}/Pos${posIdUnpadded}_expression.csv`
-      : ""
-  const [output, setOutput] = useState(defaultOutput)
+    rootPath && pos ? `${rootPath.replace(/\/$/, "")}/Pos${posIdUnpadded}_expression.csv` : "";
+  const [output, setOutput] = useState(defaultOutput);
 
   useEffect(() => {
-    if (open) setOutput(defaultOutput)
-  }, [open, defaultOutput])
+    if (open) setOutput(defaultOutput);
+  }, [open, defaultOutput]);
 
   useEffect(() => {
-    if (!open || !rootPath) return
-    let cancelled = false
-    setLoading(true)
+    if (!open || !rootPath) return;
+    let cancelled = false;
+    setLoading(true);
     discoverStore(rootPath, undefined, { metadataMode: "fast" })
       .then((idx) => {
-        if (cancelled) return
-        setPositions(idx.positions)
-        const map = new Map<string, Array<{ posId: string; cropId: string; shape: number[] }>>()
+        if (cancelled) return;
+        setPositions(idx.positions);
+        const map = new Map<string, Array<{ posId: string; cropId: string; shape: number[] }>>();
         for (const [posId, infos] of idx.crops.entries()) {
           map.set(
             posId,
-            infos.map((c) => ({ posId: c.posId, cropId: c.cropId, shape: [...c.shape] }))
-          )
+            infos.map((c) => ({ posId: c.posId, cropId: c.cropId, shape: [...c.shape] })),
+          );
         }
-        setCropsByPos(map)
+        setCropsByPos(map);
         if (idx.positions.length > 0) {
-          setPos(idx.positions[0])
-          setChannel(0)
+          setPos(idx.positions[0]);
+          setChannel(0);
         }
       })
       .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => { cancelled = true }
-  }, [open, rootPath])
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, rootPath]);
 
-  const crops = cropsByPos.get(pos) ?? []
-  const firstCropInfo = crops[0]
-  const nChannels = firstCropInfo?.shape?.[1] ?? 1
+  const crops = cropsByPos.get(pos) ?? [];
+  const firstCropInfo = crops[0];
+  const nChannels = firstCropInfo?.shape?.[1] ?? 1;
 
   const handleBrowseOutput = useCallback(async () => {
-    const result = await window.mupatternDesktop.tasks.pickExpressionOutput(output)
-    if (result) setOutput(result.path)
-  }, [output])
+    const result = await window.mupatternDesktop.tasks.pickExpressionOutput(output);
+    if (result) setOutput(result.path);
+  }, [output]);
 
   const handleCreate = useCallback(() => {
     onCreate({
@@ -87,15 +89,12 @@ export function ExpressionTaskConfigModal({
       pos: Number.parseInt(pos, 10),
       channel,
       output,
-    })
-    onClose()
-  }, [rootPath, pos, channel, output, onCreate, onClose])
+    });
+    onClose();
+  }, [rootPath, pos, channel, output, onCreate, onClose]);
 
   const canCreate =
-    rootPath &&
-    positions.length > 0 &&
-    output.trim().length > 0 &&
-    channel < nChannels
+    rootPath && positions.length > 0 && output.trim().length > 0 && channel < nChannels;
 
   return (
     <Dialog open={open} onOpenChange={(o) => (o ? undefined : onClose())}>
@@ -168,5 +167,5 @@ export function ExpressionTaskConfigModal({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

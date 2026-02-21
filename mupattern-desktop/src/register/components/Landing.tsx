@@ -1,140 +1,136 @@
-import { useState, useCallback, useRef } from "react"
-import { Button, Input, Label, HexBackground } from "@mupattern/shared"
-import { ImageIcon, Ruler } from "lucide-react"
-import * as UTIF from "utif2"
-import { ThemeToggle, useTheme } from "@mupattern/shared"
+import { useState, useCallback, useRef } from "react";
+import { Button, Input, Label, HexBackground } from "@mupattern/shared";
+import { ImageIcon, Ruler } from "lucide-react";
+import * as UTIF from "utif2";
+import { ThemeToggle, useTheme } from "@mupattern/shared";
 
-const ACCEPTED_TYPES = new Set(["image/png", "image/tiff", "image/tif"])
-const TIFF_TYPES = new Set(["image/tiff", "image/tif"])
+const ACCEPTED_TYPES = new Set(["image/png", "image/tiff", "image/tif"]);
+const TIFF_TYPES = new Set(["image/tiff", "image/tif"]);
 
 function isTiff(file: File): boolean {
-  return TIFF_TYPES.has(file.type) || /\.tiff?$/i.test(file.name)
+  return TIFF_TYPES.has(file.type) || /\.tiff?$/i.test(file.name);
 }
 
 function stripExtension(filename: string): string {
-  return filename.replace(/\.[^.]+$/, "")
+  return filename.replace(/\.[^.]+$/, "");
 }
 
 export interface StartWithImage {
-  kind: "image"
-  image: HTMLImageElement
-  filename: string
+  kind: "image";
+  image: HTMLImageElement;
+  filename: string;
 }
 
 export interface StartFresh {
-  kind: "fresh"
-  width: number
-  height: number
+  kind: "fresh";
+  width: number;
+  height: number;
 }
 
-export type StartConfig = StartWithImage | StartFresh
+export type StartConfig = StartWithImage | StartFresh;
 
 interface LandingProps {
-  onStart: (config: StartConfig) => void
+  onStart: (config: StartConfig) => void;
 }
 
 export function Landing({ onStart }: LandingProps) {
-  const { theme } = useTheme()
-  const inputRef = useRef<HTMLInputElement>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [width, setWidth] = useState(2048)
-  const [height, setHeight] = useState(2048)
+  const { theme } = useTheme();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [width, setWidth] = useState(2048);
+  const [height, setHeight] = useState(2048);
 
   const handleImageReady = useCallback(
     (img: HTMLImageElement, filename: string) => {
-      setLoading(false)
-      onStart({ kind: "image", image: img, filename })
+      setLoading(false);
+      onStart({ kind: "image", image: img, filename });
     },
-    [onStart]
-  )
+    [onStart],
+  );
 
   const loadTiff = useCallback(
     (file: File) => {
-      const baseName = stripExtension(file.name)
-      const reader = new FileReader()
+      const baseName = stripExtension(file.name);
+      const reader = new FileReader();
       reader.onload = (e) => {
         try {
-          const buffer = e.target?.result as ArrayBuffer
-          const ifds = UTIF.decode(buffer)
+          const buffer = e.target?.result as ArrayBuffer;
+          const ifds = UTIF.decode(buffer);
           if (ifds.length === 0) {
-            setError("Could not decode TIFF file")
-            setLoading(false)
-            return
+            setError("Could not decode TIFF file");
+            setLoading(false);
+            return;
           }
-          UTIF.decodeImage(buffer, ifds[0])
-          const rgba = UTIF.toRGBA8(ifds[0])
-          const w = ifds[0].width
-          const h = ifds[0].height
+          UTIF.decodeImage(buffer, ifds[0]);
+          const rgba = UTIF.toRGBA8(ifds[0]);
+          const w = ifds[0].width;
+          const h = ifds[0].height;
 
-          const canvas = document.createElement("canvas")
-          canvas.width = w
-          canvas.height = h
-          const ctx = canvas.getContext("2d")!
-          const imageData = new ImageData(
-            new Uint8ClampedArray(rgba.buffer as ArrayBuffer),
-            w,
-            h
-          )
-          ctx.putImageData(imageData, 0, 0)
+          const canvas = document.createElement("canvas");
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext("2d")!;
+          const imageData = new ImageData(new Uint8ClampedArray(rgba.buffer as ArrayBuffer), w, h);
+          ctx.putImageData(imageData, 0, 0);
 
-          const img = new Image()
-          img.onload = () => handleImageReady(img, baseName)
-          img.src = canvas.toDataURL("image/png")
+          const img = new Image();
+          img.onload = () => handleImageReady(img, baseName);
+          img.src = canvas.toDataURL("image/png");
         } catch {
-          setError("Failed to decode TIFF file")
-          setLoading(false)
+          setError("Failed to decode TIFF file");
+          setLoading(false);
         }
-      }
-      reader.readAsArrayBuffer(file)
+      };
+      reader.readAsArrayBuffer(file);
     },
-    [handleImageReady]
-  )
+    [handleImageReady],
+  );
 
   const loadPng = useCallback(
     (file: File) => {
-      const baseName = stripExtension(file.name)
-      const reader = new FileReader()
+      const baseName = stripExtension(file.name);
+      const reader = new FileReader();
       reader.onload = (e) => {
-        const img = new Image()
-        img.onload = () => handleImageReady(img, baseName)
-        img.src = e.target?.result as string
-      }
-      reader.readAsDataURL(file)
+        const img = new Image();
+        img.onload = () => handleImageReady(img, baseName);
+        img.src = e.target?.result as string;
+      };
+      reader.readAsDataURL(file);
     },
-    [handleImageReady]
-  )
+    [handleImageReady],
+  );
 
   const loadImage = useCallback(
     (file: File) => {
-      setLoading(true)
+      setLoading(true);
       if (isTiff(file)) {
-        setError(null)
-        loadTiff(file)
+        setError(null);
+        loadTiff(file);
       } else if (ACCEPTED_TYPES.has(file.type)) {
-        setError(null)
-        loadPng(file)
+        setError(null);
+        loadPng(file);
       } else {
-        setError("Only PNG and TIFF files are accepted")
-        setLoading(false)
+        setError("Only PNG and TIFF files are accepted");
+        setLoading(false);
       }
     },
-    [loadTiff, loadPng]
-  )
+    [loadTiff, loadPng],
+  );
 
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0]
-      if (file) loadImage(file)
+      const file = e.target.files?.[0];
+      if (file) loadImage(file);
     },
-    [loadImage]
-  )
+    [loadImage],
+  );
 
   const handleStartFresh = useCallback(() => {
-    const w = Math.max(64, Math.min(8192, width))
-    const h = Math.max(64, Math.min(8192, height))
-    onStart({ kind: "fresh", width: w, height: h })
-  }, [width, height, onStart])
+    const w = Math.max(64, Math.min(8192, width));
+    const h = Math.max(64, Math.min(8192, height));
+    onStart({ kind: "fresh", width: w, height: h });
+  }, [width, height, onStart]);
 
   return (
     <div className="relative flex min-h-[100dvh] flex-col items-center justify-center gap-8 p-6">
@@ -145,15 +141,10 @@ export function Landing({ onStart }: LandingProps) {
       </div>
 
       <div className="text-center">
-        <h1
-          className="text-4xl tracking-tight"
-          style={{ fontFamily: '"Bitcount", monospace' }}
-        >
+        <h1 className="text-4xl tracking-tight" style={{ fontFamily: '"Bitcount", monospace' }}>
           Register
         </h1>
-        <p className="text-muted-foreground mt-1">
-          Microscopy pattern-to-image registration
-        </p>
+        <p className="text-muted-foreground mt-1">Microscopy pattern-to-image registration</p>
       </div>
 
       <div className="flex gap-6 max-w-2xl w-full px-6">
@@ -168,9 +159,7 @@ export function Landing({ onStart }: LandingProps) {
           />
           <div className="flex flex-col items-center gap-4">
             <ImageIcon className="size-8 text-muted-foreground" />
-            <p className="font-medium">
-              {loading ? "Loading..." : "Load image"}
-            </p>
+            <p className="font-medium">{loading ? "Loading..." : "Load image"}</p>
             <p className="text-sm text-muted-foreground text-center">
               Open a PNG or TIFF microscopy image.
             </p>
@@ -224,11 +213,7 @@ export function Landing({ onStart }: LandingProps) {
         </div>
       </div>
 
-      {error && (
-        <p className="text-destructive text-sm max-w-md text-center">
-          {error}
-        </p>
-      )}
+      {error && <p className="text-destructive text-sm max-w-md text-center">{error}</p>}
     </div>
-  )
+  );
 }

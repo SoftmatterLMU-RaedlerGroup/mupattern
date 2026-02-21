@@ -1,11 +1,11 @@
-import { HexBackground, ThemeToggle, useTheme } from "@mupattern/shared"
-import { PositionPicker } from "@/see/components/PositionPicker"
+import { HexBackground, ThemeToggle, useTheme } from "@mupattern/shared";
+import { PositionPicker } from "@/see/components/PositionPicker";
 
 interface PositionPickerScreenProps {
-  positions: string[]
-  loading: boolean
-  error: string | null
-  onConfirm: (selected: string[]) => void
+  positions: string[];
+  loading: boolean;
+  error: string | null;
+  onConfirm: (selected: string[]) => void;
 }
 
 export function PositionPickerScreen({
@@ -14,7 +14,7 @@ export function PositionPickerScreen({
   error,
   onConfirm,
 }: PositionPickerScreenProps) {
-  const { theme } = useTheme()
+  const { theme } = useTheme();
 
   return (
     <div className="relative flex flex-col items-center justify-center h-screen gap-8 p-6">
@@ -25,10 +25,7 @@ export function PositionPickerScreen({
       </div>
 
       <div className="text-center">
-        <h1
-          className="text-4xl tracking-tight"
-          style={{ fontFamily: '"Bitcount", monospace' }}
-        >
+        <h1 className="text-4xl tracking-tight" style={{ fontFamily: '"Bitcount", monospace' }}>
           See
         </h1>
         <p className="text-muted-foreground mt-1 text-center max-w-md">
@@ -36,17 +33,9 @@ export function PositionPickerScreen({
         </p>
       </div>
 
-      <PositionPicker
-        positions={positions}
-        loading={loading}
-        onConfirm={onConfirm}
-      />
+      <PositionPicker positions={positions} loading={loading} onConfirm={onConfirm} />
 
-      {error && (
-        <p className="text-destructive text-sm max-w-md text-center">
-          {error}
-        </p>
-      )}
+      {error && <p className="text-destructive text-sm max-w-md text-center">{error}</p>}
     </div>
-  )
+  );
 }

@@ -1,6 +1,9 @@
 # Dependencies
 node_modules/
 
+# nd2-rs (separate repo, use crates.io)
+nd2-rs/
+
 # Build output
 dist/
 build/

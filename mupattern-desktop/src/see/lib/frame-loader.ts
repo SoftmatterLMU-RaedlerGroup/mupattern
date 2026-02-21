@@ -10,7 +10,7 @@ function formatError(error: unknown): string {
 
 async function runBatch<Item, Value>(
   items: readonly Item[],
-  loader: (item: Item) => Promise<Value>
+  loader: (item: Item) => Promise<Value>,
 ): Promise<BatchLoadResult<Value>[]> {
   return Promise.all(
     items.map(async (item) => {
@@ -20,7 +20,7 @@ async function runBatch<Item, Value>(
       } catch (error) {
         return { value: null, error: formatError(error) };
       }
-    })
+    }),
   );
 }
 
@@ -30,7 +30,7 @@ async function runBatch<Item, Value>(
  */
 export async function loadBatchWithRetryOnTotalFailure<Item, Value>(
   items: readonly Item[],
-  loader: (item: Item) => Promise<Value>
+  loader: (item: Item) => Promise<Value>,
 ): Promise<BatchLoadResult<Value>[]> {
   const firstAttempt = await runBatch(items, loader);
   const hasAnySuccess = firstAttempt.some((result) => result.value !== null);

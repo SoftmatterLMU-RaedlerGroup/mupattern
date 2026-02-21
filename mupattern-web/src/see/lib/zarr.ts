@@ -34,9 +34,7 @@ async function listDirs(dir: FileSystemDirectoryHandle): Promise<string[]> {
 /**
  * Quick scan: list just the position IDs without reading any zarr arrays.
  */
-export async function listPositions(
-  rootDirHandle: FileSystemDirectoryHandle
-): Promise<string[]> {
+export async function listPositions(rootDirHandle: FileSystemDirectoryHandle): Promise<string[]> {
   let posDir: FileSystemDirectoryHandle;
   try {
     posDir = await rootDirHandle.getDirectoryHandle("pos");
@@ -68,7 +66,7 @@ export async function listPositions(
 export async function discoverStore(
   rootDirHandle: FileSystemDirectoryHandle,
   store: DirectoryStore,
-  positionFilter?: string[]
+  positionFilter?: string[],
 ): Promise<StoreIndex> {
   const positions: string[] = [];
   const crops = new Map<string, CropInfo[]>();
@@ -81,7 +79,7 @@ export async function discoverStore(
   }
 
   const root = zarr.root(store);
-  const posIds = positionFilter ?? await listDirs(posDir);
+  const posIds = positionFilter ?? (await listDirs(posDir));
 
   for (const posId of posIds) {
     let cropDir: FileSystemDirectoryHandle;
@@ -130,7 +128,7 @@ export async function loadFrame(
   cropId: string,
   t: number,
   c: number = 0,
-  z: number = 0
+  z: number = 0,
 ): Promise<{ data: Uint16Array; height: number; width: number }> {
   const root = zarr.root(store);
   const arr = await zarr.open.v3(root.resolve(`pos/${posId}/crop/${cropId}`), {

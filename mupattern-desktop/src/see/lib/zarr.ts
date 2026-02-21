@@ -5,28 +5,28 @@
  */
 
 export interface CropInfo {
-  posId: string
-  cropId: string
+  posId: string;
+  cropId: string;
   /** TCZYX shape */
-  shape: readonly number[]
-  bbox?: { x: number; y: number; w: number; h: number; crop: number }
+  shape: readonly number[];
+  bbox?: { x: number; y: number; w: number; h: number; crop: number };
 }
 
 export interface StoreIndex {
-  positions: string[]
-  crops: Map<string, CropInfo[]>
+  positions: string[];
+  crops: Map<string, CropInfo[]>;
 }
 
 export interface DiscoverStoreOptions {
-  metadataMode?: "full" | "fast"
+  metadataMode?: "full" | "fast";
 }
 
 export interface ZarrStore {
-  workspacePath: string
+  workspacePath: string;
 }
 
 export function createZarrStore(workspacePath: string): ZarrStore {
-  return { workspacePath }
+  return { workspacePath };
 }
 
 /**
@@ -36,15 +36,15 @@ export function createZarrStore(workspacePath: string): ZarrStore {
 export async function discoverStore(
   workspacePath: string,
   positionFilter?: string[],
-  options: DiscoverStoreOptions = {}
+  options: DiscoverStoreOptions = {},
 ): Promise<StoreIndex> {
   const response = await window.mupatternDesktop.zarr.discover({
     workspacePath,
     positionFilter,
     metadataMode: options.metadataMode ?? "full",
-  })
+  });
 
-  const crops = new Map<string, CropInfo[]>()
+  const crops = new Map<string, CropInfo[]>();
   for (const [posId, infos] of Object.entries(response.crops)) {
     crops.set(
       posId,
@@ -52,14 +52,14 @@ export async function discoverStore(
         posId: info.posId,
         cropId: info.cropId,
         shape: info.shape,
-      }))
-    )
+      })),
+    );
   }
 
   return {
     positions: response.positions,
     crops,
-  }
+  };
 }
 
 /**
@@ -71,7 +71,7 @@ export async function loadFrame(
   cropId: string,
   t: number,
   c: number = 0,
-  z: number = 0
+  z: number = 0,
 ): Promise<{ data: Uint16Array; height: number; width: number }> {
   const response = await window.mupatternDesktop.zarr.loadFrame({
     workspacePath: store.workspacePath,
@@ -80,25 +80,25 @@ export async function loadFrame(
     t,
     c,
     z,
-  })
+  });
 
   if (!response.ok) {
-    throw new Error(response.error)
+    throw new Error(response.error);
   }
 
   return {
     data: new Uint16Array(response.data),
     height: response.height,
     width: response.width,
-  }
+  };
 }
 
 /**
  * Check whether the given masks zarr path exists and has pos/ layout.
  */
 export async function hasMasks(masksPath: string): Promise<boolean> {
-  const response = await window.mupatternDesktop.zarr.hasMasks({ masksPath })
-  return response.hasMasks
+  const response = await window.mupatternDesktop.zarr.hasMasks({ masksPath });
+  return response.hasMasks;
 }
 
 /**
@@ -109,22 +109,22 @@ export async function loadMaskFrame(
   masksPath: string,
   posId: string,
   cropId: string,
-  t: number
+  t: number,
 ): Promise<{ data: Uint32Array; height: number; width: number }> {
   const response = await window.mupatternDesktop.zarr.loadMaskFrame({
     masksPath,
     posId,
     cropId,
     t,
-  })
+  });
 
   if (!response.ok) {
-    throw new Error(response.error)
+    throw new Error(response.error);
   }
 
   return {
     data: new Uint32Array(response.data),
     height: response.height,
     width: response.width,
-  }
+  };
 }

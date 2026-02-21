@@ -1,27 +1,38 @@
-import { useCallback, useRef } from "react"
-import { ChevronsUpDown } from "lucide-react"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger, Separator, Button } from "@mupattern/shared"
-import { CalibrationControls } from "@/register/components/CalibrationControls"
-import { PatternEditor } from "@/register/components/PatternEditor"
-import { TransformEditor } from "@/register/components/TransformEditor"
-import { Slider, Label } from "@mupattern/shared"
-import { parseYAMLConfig } from "@mupattern/shared/register/lib/units"
-import type { Calibration, Lattice, PatternConfigUm, Transform } from "@mupattern/shared/register/types"
+import { useCallback, useRef } from "react";
+import { ChevronsUpDown } from "lucide-react";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+  Separator,
+  Button,
+} from "@mupattern/shared";
+import { CalibrationControls } from "@/register/components/CalibrationControls";
+import { PatternEditor } from "@/register/components/PatternEditor";
+import { TransformEditor } from "@/register/components/TransformEditor";
+import { Slider, Label } from "@mupattern/shared";
+import { parseYAMLConfig } from "@mupattern/shared/register/lib/units";
+import type {
+  Calibration,
+  Lattice,
+  PatternConfigUm,
+  Transform,
+} from "@mupattern/shared/register/types";
 
 interface SidebarProps {
-  onConfigLoad: (config: PatternConfigUm) => void
-  onConfigSave?: () => void
-  onCalibrationLoad: (cal: Calibration) => void
-  calibration: Calibration
-  onCalibrationChange: (cal: Calibration) => void
-  pattern: PatternConfigUm
-  onLatticeUpdate: (updates: Partial<Lattice>) => void
-  onWidthUpdate: (width: number) => void
-  onHeightUpdate: (height: number) => void
-  transform: Transform
-  onTransformUpdate: (updates: Partial<Transform>) => void
-  patternOpacity: number
-  onPatternOpacityChange: (v: number) => void
+  onConfigLoad: (config: PatternConfigUm) => void;
+  onConfigSave?: () => void;
+  onCalibrationLoad: (cal: Calibration) => void;
+  calibration: Calibration;
+  onCalibrationChange: (cal: Calibration) => void;
+  pattern: PatternConfigUm;
+  onLatticeUpdate: (updates: Partial<Lattice>) => void;
+  onWidthUpdate: (width: number) => void;
+  onHeightUpdate: (height: number) => void;
+  transform: Transform;
+  onTransformUpdate: (updates: Partial<Transform>) => void;
+  patternOpacity: number;
+  onPatternOpacityChange: (v: number) => void;
 }
 
 function Section({
@@ -29,9 +40,9 @@ function Section({
   defaultOpen = true,
   children,
 }: {
-  title: string
-  defaultOpen?: boolean
-  children: React.ReactNode
+  title: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
 }) {
   return (
     <Collapsible defaultOpen={defaultOpen}>
@@ -41,11 +52,9 @@ function Section({
           <ChevronsUpDown className="h-3.5 w-3.5" />
         </button>
       </CollapsibleTrigger>
-      <CollapsibleContent className="pt-1 pb-2">
-        {children}
-      </CollapsibleContent>
+      <CollapsibleContent className="pt-1 pb-2">{children}</CollapsibleContent>
     </Collapsible>
-  )
+  );
 }
 
 export function Sidebar({
@@ -63,22 +72,25 @@ export function Sidebar({
   patternOpacity,
   onPatternOpacityChange,
 }: SidebarProps) {
-  const configInputRef = useRef<HTMLInputElement>(null)
+  const configInputRef = useRef<HTMLInputElement>(null);
 
-  const handleConfigFile = useCallback((file: File) => {
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      try {
-        const text = e.target?.result as string
-        const { pattern, calibration } = parseYAMLConfig(text)
-        onConfigLoad(pattern)
-        if (calibration) onCalibrationLoad(calibration)
-      } catch {
-        // silently fail
-      }
-    }
-    reader.readAsText(file)
-  }, [onConfigLoad, onCalibrationLoad])
+  const handleConfigFile = useCallback(
+    (file: File) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const text = e.target?.result as string;
+          const { pattern, calibration } = parseYAMLConfig(text);
+          onConfigLoad(pattern);
+          if (calibration) onCalibrationLoad(calibration);
+        } catch {
+          // silently fail
+        }
+      };
+      reader.readAsText(file);
+    },
+    [onConfigLoad, onCalibrationLoad],
+  );
 
   return (
     <aside className="w-80 flex-shrink-0 overflow-y-auto border-l border-border p-4 space-y-1">
@@ -88,14 +100,28 @@ export function Sidebar({
             ref={configInputRef}
             type="file"
             accept=".yaml,.yml"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleConfigFile(f); e.target.value = "" }}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleConfigFile(f);
+              e.target.value = "";
+            }}
             className="hidden"
           />
-          <Button variant="secondary" size="sm" className="w-full h-7 text-base" onClick={() => configInputRef.current?.click()}>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="w-full h-7 text-base"
+            onClick={() => configInputRef.current?.click()}
+          >
             Load config
           </Button>
           {onConfigSave && (
-            <Button variant="secondary" size="sm" className="w-full h-7 text-base" onClick={onConfigSave}>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="w-full h-7 text-base"
+              onClick={onConfigSave}
+            >
               Save config
             </Button>
           )}
@@ -105,10 +131,7 @@ export function Sidebar({
       <Separator />
 
       <Section title="Calibration">
-        <CalibrationControls
-          calibration={calibration}
-          onChange={onCalibrationChange}
-        />
+        <CalibrationControls calibration={calibration} onChange={onCalibrationChange} />
       </Section>
 
       <Separator />
@@ -140,11 +163,8 @@ export function Sidebar({
       <Separator />
 
       <Section title="Transform">
-        <TransformEditor
-          transform={transform}
-          onUpdate={onTransformUpdate}
-        />
+        <TransformEditor transform={transform} onUpdate={onTransformUpdate} />
       </Section>
     </aside>
-  )
+  );
 }

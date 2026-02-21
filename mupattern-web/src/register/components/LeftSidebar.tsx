@@ -1,12 +1,12 @@
-import { Button } from "@mupattern/shared"
+import { Button } from "@mupattern/shared";
 
 interface LeftSidebarProps {
-  hasImage: boolean
-  hasDetectedPoints: boolean
-  onDetect: () => void
-  onFitGrid: (basisAngle: number) => void
-  onReset: () => void
-  onSave: () => void
+  hasImage: boolean;
+  hasDetectedPoints: boolean;
+  onDetect: () => void;
+  onFitGrid: (basisAngle: number) => void;
+  onReset: () => void;
+  onSave: () => void;
 }
 
 export function LeftSidebar({
@@ -60,5 +60,5 @@ export function LeftSidebar({
         </div>
       </div>
     </aside>
-  )
+  );
 }

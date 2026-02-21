@@ -2,7 +2,7 @@
  * Register store — re-exports from central mupattern store.
  */
 
-export type { RegisterState as AppState } from "@/store/mupattern-store"
+export type { RegisterState as AppState } from "@/store/mupattern-store";
 export {
   mupatternStore,
   startWithImage,
@@ -18,4 +18,4 @@ export {
   resetPatternAndTransform,
   setDetectedPoints,
   clearDetectedPoints,
-} from "@/store/mupattern-store"
+} from "@/store/mupattern-store";

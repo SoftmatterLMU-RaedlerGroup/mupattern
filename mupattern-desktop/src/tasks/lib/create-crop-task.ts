@@ -3,18 +3,18 @@
  * Used from WorkspaceDashboard (context menu) and Tasks (modal).
  */
 
-import { toast } from "sonner"
+import { toast } from "sonner";
 
 export interface CreateCropParams {
-  input_dir: string
-  pos: number
-  bbox: string
-  output: string
-  background: boolean
+  input_dir: string;
+  pos: number;
+  bbox: string;
+  output: string;
+  background: boolean;
 }
 
 export async function createCropTask(params: CreateCropParams): Promise<void> {
-  const taskId = crypto.randomUUID()
+  const taskId = crypto.randomUUID();
 
   const task = {
     id: taskId,
@@ -28,27 +28,27 @@ export async function createCropTask(params: CreateCropParams): Promise<void> {
     error: null,
     logs: [],
     progress_events: [],
-  }
+  };
 
-  await window.mupatternDesktop.tasks.insertTask(task)
-  toast.success("Crop task created")
+  await window.mupatternDesktop.tasks.insertTask(task);
+  toast.success("Crop task created");
 
-  const unsub = window.mupatternDesktop.tasks.onCropProgress(() => {})
+  const unsub = window.mupatternDesktop.tasks.onCropProgress(() => {});
 
   try {
     const result = await window.mupatternDesktop.tasks.runCrop({
       taskId,
       ...params,
-    })
-    unsub()
+    });
+    unsub();
     if (result.ok) {
-      toast.success(`Crops saved to ${params.output}`)
+      toast.success(`Crops saved to ${params.output}`);
     } else {
-      toast.error(result.error ?? "Crop task failed")
+      toast.error(result.error ?? "Crop task failed");
     }
   } catch (e) {
-    unsub()
-    const msg = e instanceof Error ? e.message : String(e)
-    toast.error(msg)
+    unsub();
+    const msg = e instanceof Error ? e.message : String(e);
+    toast.error(msg);
   }
 }

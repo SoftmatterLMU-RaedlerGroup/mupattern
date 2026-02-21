@@ -2,8 +2,8 @@
  * See store — re-exports from central mupattern store.
  */
 
-export type { SeeState as ViewerState } from "@/store/mupattern-store"
-export { mupatternStore } from "@/store/mupattern-store"
+export type { SeeState as ViewerState } from "@/store/mupattern-store";
+export { mupatternStore } from "@/store/mupattern-store";
 
 export {
   setSeeAnnotations as setAnnotations,
@@ -18,4 +18,4 @@ export {
   setSeeShowAnnotations as setShowAnnotations,
   setSeeShowSpots as setShowSpots,
   getSeeAnnotationsMap as getAnnotationsMap,
-} from "@/store/mupattern-store"
+} from "@/store/mupattern-store";

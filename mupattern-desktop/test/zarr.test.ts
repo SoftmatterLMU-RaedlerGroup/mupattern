@@ -59,7 +59,10 @@ describe("loadFrame", () => {
       ok: true,
       width: 2,
       height: 2,
-      data: frameBytes.buffer.slice(frameBytes.byteOffset, frameBytes.byteOffset + frameBytes.byteLength),
+      data: frameBytes.buffer.slice(
+        frameBytes.byteOffset,
+        frameBytes.byteOffset + frameBytes.byteLength,
+      ),
     });
 
     const frame = await loadFrame(createZarrStore("C:/ws"), "140", "000", 3, 1, 2);

@@ -3,9 +3,7 @@ name = "mupattern"
 version = "0.1.0"
 description = "Micropattern analysis tools"
 requires-python = ">=3.12"
-dependencies = [
-    "mupattern-py",
-]
+dependencies = ["mupattern-py"]
 
 [dependency-groups]
 dev = ["pytest>=8"]

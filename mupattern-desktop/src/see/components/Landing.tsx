@@ -1,15 +1,15 @@
-import { useNavigate } from "react-router-dom"
-import { Button, HexBackground, ThemeToggle, useTheme } from "@mupattern/shared"
-import { FolderOpen } from "lucide-react"
+import { useNavigate } from "react-router-dom";
+import { Button, HexBackground, ThemeToggle, useTheme } from "@mupattern/shared";
+import { FolderOpen } from "lucide-react";
 
 interface LandingProps {
-  loading: boolean
-  error: string | null
+  loading: boolean;
+  error: string | null;
 }
 
 export function Landing({ loading, error }: LandingProps) {
-  const { theme } = useTheme()
-  const navigate = useNavigate()
+  const { theme } = useTheme();
+  const navigate = useNavigate();
 
   return (
     <div className="relative flex min-h-[100dvh] flex-col items-center justify-center gap-8 p-6">
@@ -20,15 +20,10 @@ export function Landing({ loading, error }: LandingProps) {
       </div>
 
       <div className="text-center">
-        <h1
-          className="text-4xl tracking-tight"
-          style={{ fontFamily: '"Bitcount", monospace' }}
-        >
+        <h1 className="text-4xl tracking-tight" style={{ fontFamily: '"Bitcount", monospace' }}>
           See
         </h1>
-        <p className="text-muted-foreground mt-1 text-center max-w-md">
-          Micropattern crop viewer
-        </p>
+        <p className="text-muted-foreground mt-1 text-center max-w-md">Micropattern crop viewer</p>
       </div>
 
       <div className="border rounded-lg p-8 backdrop-blur-sm bg-background/80 max-w-md w-full">
@@ -52,11 +47,7 @@ export function Landing({ loading, error }: LandingProps) {
         </div>
       </div>
 
-      {error && (
-        <p className="text-destructive text-sm max-w-md text-center">
-          {error}
-        </p>
-      )}
+      {error && <p className="text-destructive text-sm max-w-md text-center">{error}</p>}
     </div>
-  )
+  );
 }

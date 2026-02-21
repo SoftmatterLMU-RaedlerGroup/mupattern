@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -6,29 +6,29 @@ import {
   DialogTitle,
   DialogFooter,
   Button,
-} from "@mupattern/shared"
-import { discoverStore } from "@/see/lib/zarr"
-import type { Workspace } from "@/workspace/store"
+} from "@mupattern/shared";
+import { discoverStore } from "@/see/lib/zarr";
+import type { Workspace } from "@/workspace/store";
 
 interface MovieTaskConfigModalProps {
-  open: boolean
-  onClose: () => void
-  workspace: Workspace
+  open: boolean;
+  onClose: () => void;
+  workspace: Workspace;
   /** Pre-select position when opening (e.g. from See context menu). */
-  initialPos?: string
+  initialPos?: string;
   /** Pre-select crop when opening (e.g. from See context menu). */
-  initialCrop?: string
+  initialCrop?: string;
   onCreate: (params: {
-    input_zarr: string
-    pos: number
-    crop: number
-    channel: number
-    time: string
-    output: string
-    fps: number
-    colormap: string
-    spots: string | null
-  }) => void
+    input_zarr: string;
+    pos: number;
+    crop: number;
+    channel: number;
+    time: string;
+    output: string;
+    fps: number;
+    colormap: string;
+    spots: string | null;
+  }) => void;
 }
 
 export function MovieTaskConfigModal({
@@ -39,77 +39,79 @@ export function MovieTaskConfigModal({
   initialCrop,
   onCreate,
 }: MovieTaskConfigModalProps) {
-  const rootPath = workspace.rootPath ?? ""
-  const inputZarr = rootPath ? `${rootPath.replace(/\/$/, "")}/crops.zarr` : ""
+  const rootPath = workspace.rootPath ?? "";
+  const inputZarr = rootPath ? `${rootPath.replace(/\/$/, "")}/crops.zarr` : "";
   const defaultOutput = rootPath
     ? `${rootPath.replace(/\/$/, "")}/movie${initialCrop ? `_${initialCrop}` : ""}.mp4`
-    : ""
+    : "";
 
-  const [positions, setPositions] = useState<string[]>([])
-  const [cropsByPos, setCropsByPos] = useState<Map<string, Array<{ posId: string; cropId: string; shape: number[] }>>>(new Map())
-  const [loading, setLoading] = useState(false)
-  const [pos, setPos] = useState<string>("000")
-  const [crop, setCrop] = useState<string>("000")
-  const [channel, setChannel] = useState(0)
-  const [time, setTime] = useState("all")
-  const [output, setOutput] = useState(defaultOutput)
+  const [positions, setPositions] = useState<string[]>([]);
+  const [cropsByPos, setCropsByPos] = useState<
+    Map<string, Array<{ posId: string; cropId: string; shape: number[] }>>
+  >(new Map());
+  const [loading, setLoading] = useState(false);
+  const [pos, setPos] = useState<string>("000");
+  const [crop, setCrop] = useState<string>("000");
+  const [channel, setChannel] = useState(0);
+  const [time, setTime] = useState("all");
+  const [output, setOutput] = useState(defaultOutput);
   useEffect(() => {
-    if (open) setOutput(defaultOutput)
-  }, [open, defaultOutput])
-  const [fps, setFps] = useState(10)
-  const [colormap, setColormap] = useState("grayscale")
-  const [spots, setSpots] = useState<string | null>(null)
+    if (open) setOutput(defaultOutput);
+  }, [open, defaultOutput]);
+  const [fps, setFps] = useState(10);
+  const [colormap, setColormap] = useState("grayscale");
+  const [spots, setSpots] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!open || !rootPath) return
-    let cancelled = false
-    setLoading(true)
+    if (!open || !rootPath) return;
+    let cancelled = false;
+    setLoading(true);
     discoverStore(rootPath, undefined, { metadataMode: "fast" })
       .then((idx) => {
-        if (cancelled) return
-        setPositions(idx.positions)
-        const map = new Map<string, Array<{ posId: string; cropId: string; shape: number[] }>>()
+        if (cancelled) return;
+        setPositions(idx.positions);
+        const map = new Map<string, Array<{ posId: string; cropId: string; shape: number[] }>>();
         for (const [posId, infos] of idx.crops) {
           map.set(
             posId,
-            infos.map((c) => ({ posId: c.posId, cropId: c.cropId, shape: [...c.shape] }))
-          )
+            infos.map((c) => ({ posId: c.posId, cropId: c.cropId, shape: [...c.shape] })),
+          );
         }
-        setCropsByPos(map)
+        setCropsByPos(map);
         if (idx.positions.length > 0) {
           const posVal =
-            initialPos && idx.positions.includes(initialPos)
-              ? initialPos
-              : idx.positions[0]
-          setPos(posVal)
-          const crops = idx.crops.get(posVal) ?? []
+            initialPos && idx.positions.includes(initialPos) ? initialPos : idx.positions[0];
+          setPos(posVal);
+          const crops = idx.crops.get(posVal) ?? [];
           const cropVal =
             initialCrop && crops.some((c) => c.cropId === initialCrop)
               ? initialCrop
-              : crops[0]?.cropId ?? "000"
-          setCrop(cropVal)
-          setChannel(0)
+              : (crops[0]?.cropId ?? "000");
+          setCrop(cropVal);
+          setChannel(0);
         }
       })
       .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => { cancelled = true }
-  }, [open, rootPath, initialPos, initialCrop])
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, rootPath, initialPos, initialCrop]);
 
-  const crops = cropsByPos.get(pos) ?? []
-  const selectedCropInfo = crops.find((c) => c.cropId === crop)
-  const nChannels = selectedCropInfo?.shape?.[1] ?? 1
+  const crops = cropsByPos.get(pos) ?? [];
+  const selectedCropInfo = crops.find((c) => c.cropId === crop);
+  const nChannels = selectedCropInfo?.shape?.[1] ?? 1;
 
   const handleBrowseOutput = useCallback(async () => {
-    const result = await window.mupatternDesktop.tasks.pickMovieOutput()
-    if (result) setOutput(result.path)
-  }, [])
+    const result = await window.mupatternDesktop.tasks.pickMovieOutput();
+    if (result) setOutput(result.path);
+  }, []);
 
   const handleBrowseSpots = useCallback(async () => {
-    const result = await window.mupatternDesktop.tasks.pickSpotsFile()
-    if (result) setSpots(result.path)
-  }, [])
+    const result = await window.mupatternDesktop.tasks.pickSpotsFile();
+    if (result) setSpots(result.path);
+  }, []);
 
   const handleCreate = useCallback(() => {
     onCreate({
@@ -122,9 +124,9 @@ export function MovieTaskConfigModal({
       fps,
       colormap,
       spots,
-    })
-    onClose()
-  }, [inputZarr, pos, crop, channel, time, output, fps, colormap, spots, onCreate, onClose])
+    });
+    onClose();
+  }, [inputZarr, pos, crop, channel, time, output, fps, colormap, spots, onCreate, onClose]);
 
   const canCreate =
     rootPath &&
@@ -132,7 +134,7 @@ export function MovieTaskConfigModal({
     positions.length > 0 &&
     crops.length > 0 &&
     output.trim().length > 0 &&
-    channel < nChannels
+    channel < nChannels;
 
   return (
     <Dialog open={open} onOpenChange={(o) => (o ? undefined : onClose())}>
@@ -155,9 +157,9 @@ export function MovieTaskConfigModal({
                   className="w-full border rounded px-3 py-2 bg-background text-sm"
                   value={pos}
                   onChange={(e) => {
-                    setPos(e.target.value)
-                    const c = cropsByPos.get(e.target.value) ?? []
-                    setCrop(c[0]?.cropId ?? "000")
+                    setPos(e.target.value);
+                    const c = cropsByPos.get(e.target.value) ?? [];
+                    setCrop(c[0]?.cropId ?? "000");
                   }}
                 >
                   {positions.map((p) => (
@@ -270,5 +272,5 @@ export function MovieTaskConfigModal({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

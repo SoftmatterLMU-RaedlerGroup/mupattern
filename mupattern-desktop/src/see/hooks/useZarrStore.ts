@@ -1,9 +1,7 @@
 import { useState, useEffect } from "react";
 import { useStore } from "@tanstack/react-store";
 import { createZarrStore, discoverStore, type StoreIndex, type ZarrStore } from "@/see/lib/zarr";
-import {
-  workspaceStore,
-} from "@/workspace/store";
+import { workspaceStore } from "@/workspace/store";
 import { setSelectedPositions, setSelectedPos, setC, setZ } from "@/see/store";
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
@@ -68,13 +66,9 @@ export function useZarrStore() {
 
         const resolvedPosId = String(workspacePos);
         const idx: StoreIndex = await withTimeout(
-          discoverStore(
-            activeWorkspace.rootPath,
-            [resolvedPosId],
-            { metadataMode: "fast" }
-          ),
+          discoverStore(activeWorkspace.rootPath, [resolvedPosId], { metadataMode: "fast" }),
           12000,
-          `Timed out loading crops at pos/${resolvedPosId}/crop.`
+          `Timed out loading crops at pos/${resolvedPosId}/crop.`,
         );
 
         if (idx.positions.length === 0) {
@@ -100,7 +94,9 @@ export function useZarrStore() {
     }
 
     void loadFromWorkspace();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [activeWorkspace, loadKey]);
 
   return {

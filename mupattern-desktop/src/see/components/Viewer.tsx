@@ -3,7 +3,11 @@ import { useStore } from "@tanstack/react-store";
 import type { StoreIndex, CropInfo, ZarrStore } from "@/see/lib/zarr";
 import { loadFrame, loadMaskFrame, hasMasks } from "@/see/lib/zarr";
 import { loadBatchWithRetryOnTotalFailure } from "@/see/lib/frame-loader";
-import { renderUint16ToCanvas, drawSpots, drawMaskContours } from "@mupattern/shared/see/lib/render";
+import {
+  renderUint16ToCanvas,
+  drawSpots,
+  drawMaskContours,
+} from "@mupattern/shared/see/lib/render";
 import { labelMapToContours } from "@mupattern/shared/see/lib/contours";
 import {
   type Annotations,
@@ -77,21 +81,17 @@ export function Viewer({ store, index, onSaveAsMovie }: ViewerProps) {
   const masksPath = useStore(viewerStore, (s) => s.masksPath);
 
   // Derive annotations Map from persisted entries
-  const annotations: Annotations = useMemo(
-    () => new Map(annotationEntries),
-    [annotationEntries]
-  );
+  const annotations: Annotations = useMemo(() => new Map(annotationEntries), [annotationEntries]);
 
   // Derive spots Map from persisted entries
-  const spots: SpotMap = useMemo(
-    () => new Map(spotEntries),
-    [spotEntries]
-  );
+  const spots: SpotMap = useMemo(() => new Map(spotEntries), [spotEntries]);
 
   // Ephemeral state
   const [playing, setPlaying] = useState(false);
   const [frameLoadError, setFrameLoadError] = useState<string | null>(null);
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; crop: CropInfo } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; crop: CropInfo } | null>(
+    null,
+  );
   const [refreshTick, setRefreshTick] = useState(0);
   const [workspaceHasMasks, setWorkspaceHasMasks] = useState(false);
   const [autoContrastDone, setAutoContrastDone] = useState(true);
@@ -101,9 +101,7 @@ export function Viewer({ store, index, onSaveAsMovie }: ViewerProps) {
   const refreshedKeysRef = useRef<Set<string>>(new Set());
 
   // Validate persisted selectedPos against available positions
-  const validPos = index.positions.includes(selectedPos)
-    ? selectedPos
-    : index.positions[0] ?? "";
+  const validPos = index.positions.includes(selectedPos) ? selectedPos : (index.positions[0] ?? "");
 
   useEffect(() => {
     if (!masksPath) {
@@ -154,23 +152,11 @@ export function Viewer({ store, index, onSaveAsMovie }: ViewerProps) {
   // Wrapped setters that persist
   const setT = useCallback((v: number) => persistT(v), []);
   const setPage = useCallback((v: number) => persistPage(v), []);
-  const setContrastMin = useCallback(
-    (v: number) => persistContrast(v, contrastMax),
-    [contrastMax]
-  );
-  const setContrastMax = useCallback(
-    (v: number) => persistContrast(contrastMin, v),
-    [contrastMin]
-  );
+  const setContrastMin = useCallback((v: number) => persistContrast(v, contrastMax), [contrastMax]);
+  const setContrastMax = useCallback((v: number) => persistContrast(contrastMin, v), [contrastMin]);
   const setAnnotating = useCallback((v: boolean) => persistAnnotating(v), []);
-  const setAnnotations = useCallback(
-    (a: Annotations) => persistAnnotations(a),
-    []
-  );
-  const setSpots = useCallback(
-    (s: SpotMap) => persistSpots(s),
-    []
-  );
+  const setAnnotations = useCallback((a: Annotations) => persistAnnotations(a), []);
+  const setSpots = useCallback((s: SpotMap) => persistSpots(s), []);
 
   // Playback
   useEffect(() => {
@@ -191,17 +177,16 @@ export function Viewer({ store, index, onSaveAsMovie }: ViewerProps) {
     const renderKey = `${validPos}:${clampedT}:${clampedC}:${clampedZ}:${clampedPage}`;
 
     async function loadPage() {
-      const frameResults = await loadBatchWithRetryOnTotalFailure(
-        pageCrops,
-        async (crop) => {
-          try {
-            return await loadFrame(store, crop.posId, crop.cropId, clampedT, clampedC, clampedZ);
-          } catch (e) {
-            const msg = e instanceof Error ? e.message : String(e);
-            throw new Error(`pos=${crop.posId} crop=${crop.cropId} t=${clampedT} c=${clampedC} z=${clampedZ}: ${msg}`);
-          }
+      const frameResults = await loadBatchWithRetryOnTotalFailure(pageCrops, async (crop) => {
+        try {
+          return await loadFrame(store, crop.posId, crop.cropId, clampedT, clampedC, clampedZ);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          throw new Error(
+            `pos=${crop.posId} crop=${crop.cropId} t=${clampedT} c=${clampedC} z=${clampedZ}: ${msg}`,
+          );
         }
-      );
+      });
       const frames = frameResults.map((r) => r.value);
 
       if (cancelled) return;
@@ -244,7 +229,7 @@ export function Viewer({ store, index, onSaveAsMovie }: ViewerProps) {
           frame.width,
           frame.height,
           renderContrastMin,
-          renderContrastMax
+          renderContrastMax,
         );
         // Overlay spots
         if (showSpots) {
@@ -255,7 +240,12 @@ export function Viewer({ store, index, onSaveAsMovie }: ViewerProps) {
         // Overlay mask contours
         if (showMasks && workspaceHasMasks && masksPath) {
           try {
-            const mask = await loadMaskFrame(masksPath, pageCrops[i].posId, pageCrops[i].cropId, clampedT);
+            const mask = await loadMaskFrame(
+              masksPath,
+              pageCrops[i].posId,
+              pageCrops[i].cropId,
+              clampedT,
+            );
             const contours = labelMapToContours(mask.data, mask.width, mask.height);
             drawMaskContours(canvas, contours);
           } catch {
@@ -278,7 +268,22 @@ export function Viewer({ store, index, onSaveAsMovie }: ViewerProps) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store, validPos, clampedT, clampedC, clampedZ, clampedPage, contrastMin, contrastMax, autoContrastDone, spots, showSpots, showMasks, workspaceHasMasks, refreshTick]);
+  }, [
+    store,
+    validPos,
+    clampedT,
+    clampedC,
+    clampedZ,
+    clampedPage,
+    contrastMin,
+    contrastMax,
+    autoContrastDone,
+    spots,
+    showSpots,
+    showMasks,
+    workspaceHasMasks,
+    refreshTick,
+  ]);
 
   const setCanvasRef = useCallback(
     (key: string) => (el: HTMLCanvasElement | null) => {
@@ -288,7 +293,7 @@ export function Viewer({ store, index, onSaveAsMovie }: ViewerProps) {
         canvasRefs.current.delete(key);
       }
     },
-    []
+    [],
   );
 
   const resetAutoContrast = useCallback(() => {
@@ -310,7 +315,7 @@ export function Viewer({ store, index, onSaveAsMovie }: ViewerProps) {
       }
       setAnnotations(next);
     },
-    [validPos, clampedT, annotations, setAnnotations]
+    [validPos, clampedT, annotations, setAnnotations],
   );
 
   const handleSave = useCallback(() => {
@@ -363,7 +368,7 @@ export function Viewer({ store, index, onSaveAsMovie }: ViewerProps) {
       }
       toast.error("Movie task config unavailable");
     },
-    [store.workspacePath, validPos, onSaveAsMovie]
+    [store.workspacePath, validPos, onSaveAsMovie],
   );
 
   useEffect(() => {
@@ -410,11 +415,7 @@ export function Viewer({ store, index, onSaveAsMovie }: ViewerProps) {
 
   return (
     <div className="flex flex-col h-screen">
-      <AppHeader
-        title="See"
-        subtitle="Micropattern crop viewer"
-        backTo="/workspace"
-      />
+      <AppHeader title="See" subtitle="Micropattern crop viewer" backTo="/workspace" />
       {frameLoadError && (
         <div className="px-4 py-2 text-xs text-destructive border-b border-border">
           {frameLoadError}
@@ -428,13 +429,25 @@ export function Viewer({ store, index, onSaveAsMovie }: ViewerProps) {
         <div className="flex-1 overflow-hidden flex flex-col">
           <div className="shrink-0 grid grid-cols-3 items-center gap-4 px-4 py-2 border-b border-border">
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="icon-xs" disabled={clampedPage === 0} onClick={() => setPage(clampedPage - 1)} title="Previous page">
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                disabled={clampedPage === 0}
+                onClick={() => setPage(clampedPage - 1)}
+                title="Previous page"
+              >
                 <ChevronLeft className="size-3" />
               </Button>
               <span className="text-sm tabular-nums min-w-[4rem] text-center">
                 {clampedPage + 1} / {totalPages}
               </span>
-              <Button variant="ghost" size="icon-xs" disabled={clampedPage >= totalPages - 1} onClick={() => setPage(clampedPage + 1)} title="Next page">
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                disabled={clampedPage >= totalPages - 1}
+                onClick={() => setPage(clampedPage + 1)}
+                title="Next page"
+              >
                 <ChevronRight className="size-3" />
               </Button>
             </div>
@@ -464,25 +477,66 @@ export function Viewer({ store, index, onSaveAsMovie }: ViewerProps) {
           {/* Frame control */}
           <div className="shrink-0 border-b border-border flex flex-col gap-2 px-4 py-2">
             <div className="flex items-center justify-center gap-2">
-              <Button variant="ghost" size="icon-xs" onClick={() => setT(0)} disabled={clampedT === 0} title="First frame">
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={() => setT(0)}
+                disabled={clampedT === 0}
+                title="First frame"
+              >
                 <SkipBack className="size-3" />
               </Button>
-              <Button variant="ghost" size="icon-xs" onClick={() => setT(Math.max(0, clampedT - 10))} disabled={clampedT === 0} title="-10 frames">
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={() => setT(Math.max(0, clampedT - 10))}
+                disabled={clampedT === 0}
+                title="-10 frames"
+              >
                 <ChevronsLeft className="size-3" />
               </Button>
-              <Button variant="ghost" size="icon-xs" onClick={() => setT(Math.max(0, clampedT - 1))} disabled={clampedT === 0} title="Previous frame">
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={() => setT(Math.max(0, clampedT - 1))}
+                disabled={clampedT === 0}
+                title="Previous frame"
+              >
                 <ChevronLeft className="size-3" />
               </Button>
-              <Button variant="ghost" size="icon-xs" onClick={() => setPlaying(!playing)} title={playing ? "Pause" : "Play"}>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={() => setPlaying(!playing)}
+                title={playing ? "Pause" : "Play"}
+              >
                 {playing ? <Pause className="size-3" /> : <Play className="size-3" />}
               </Button>
-              <Button variant="ghost" size="icon-xs" onClick={() => setT(Math.min(maxT, clampedT + 1))} disabled={clampedT >= maxT} title="Next frame">
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={() => setT(Math.min(maxT, clampedT + 1))}
+                disabled={clampedT >= maxT}
+                title="Next frame"
+              >
                 <ChevronRight className="size-3" />
               </Button>
-              <Button variant="ghost" size="icon-xs" onClick={() => setT(Math.min(maxT, clampedT + 10))} disabled={clampedT >= maxT} title="+10 frames">
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={() => setT(Math.min(maxT, clampedT + 10))}
+                disabled={clampedT >= maxT}
+                title="+10 frames"
+              >
                 <ChevronsRight className="size-3" />
               </Button>
-              <Button variant="ghost" size="icon-xs" onClick={() => setT(maxT)} disabled={clampedT >= maxT} title="Last frame">
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={() => setT(maxT)}
+                disabled={clampedT >= maxT}
+                title="Last frame"
+              >
                 <SkipForward className="size-3" />
               </Button>
             </div>
@@ -495,28 +549,28 @@ export function Viewer({ store, index, onSaveAsMovie }: ViewerProps) {
             />
           </div>
           <div className="flex-1 overflow-hidden p-4 min-h-0">
-          <div className="grid grid-cols-3 grid-rows-3 gap-2 h-full">
-            {pageCrops.map((crop) => (
-              <div
-                key={canvasKey(crop.posId, crop.cropId)}
-                className={`relative rounded-sm ${annotating ? "cursor-crosshair" : ""} ${borderClass(crop.cropId)}`}
-                onClick={annotating ? () => handleAnnotate(crop.cropId) : undefined}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  setContextMenu({ x: e.clientX, y: e.clientY, crop });
-                }}
-              >
-                <canvas
-                  ref={setCanvasRef(canvasKey(crop.posId, crop.cropId))}
-                  className="block w-full h-full object-contain"
-                  style={{ imageRendering: "pixelated" }}
-                />
-                <div className="absolute bottom-0 left-0 px-1 text-[10px] bg-black/60 text-white">
-                  {crop.cropId}
+            <div className="grid grid-cols-3 grid-rows-3 gap-2 h-full">
+              {pageCrops.map((crop) => (
+                <div
+                  key={canvasKey(crop.posId, crop.cropId)}
+                  className={`relative rounded-sm ${annotating ? "cursor-crosshair" : ""} ${borderClass(crop.cropId)}`}
+                  onClick={annotating ? () => handleAnnotate(crop.cropId) : undefined}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setContextMenu({ x: e.clientX, y: e.clientY, crop });
+                  }}
+                >
+                  <canvas
+                    ref={setCanvasRef(canvasKey(crop.posId, crop.cropId))}
+                    className="block w-full h-full object-contain"
+                    style={{ imageRendering: "pixelated" }}
+                  />
+                  <div className="absolute bottom-0 left-0 px-1 text-[10px] bg-black/60 text-white">
+                    {crop.cropId}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -524,7 +578,9 @@ export function Viewer({ store, index, onSaveAsMovie }: ViewerProps) {
         <aside className="w-64 flex-shrink-0 border-l border-border p-3 flex flex-col gap-4 text-sm overflow-y-auto">
           {/* Annotations section */}
           <div className="flex flex-col gap-2">
-            <h3 className="font-medium text-xs uppercase text-muted-foreground tracking-wide">Annotations</h3>
+            <h3 className="font-medium text-xs uppercase text-muted-foreground tracking-wide">
+              Annotations
+            </h3>
             <Button
               variant={annotating ? "default" : "ghost"}
               size="xs"
@@ -536,10 +592,21 @@ export function Viewer({ store, index, onSaveAsMovie }: ViewerProps) {
               {annotating ? "Annotating" : "Annotate"}
             </Button>
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="icon-xs" onClick={handleLoad} title="Load annotations CSV">
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={handleLoad}
+                title="Load annotations CSV"
+              >
                 <Upload className="size-3.5" />
               </Button>
-              <Button variant="ghost" size="icon-xs" onClick={handleSave} title="Save annotations CSV" disabled={annotations.size === 0}>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={handleSave}
+                title="Save annotations CSV"
+                disabled={annotations.size === 0}
+              >
                 <Download className="size-3.5" />
               </Button>
               <span className="text-muted-foreground tabular-nums text-xs">
@@ -563,7 +630,9 @@ export function Viewer({ store, index, onSaveAsMovie }: ViewerProps) {
 
           {/* Spots section */}
           <div className="flex flex-col gap-2">
-            <h3 className="font-medium text-xs uppercase text-muted-foreground tracking-wide">Spots</h3>
+            <h3 className="font-medium text-xs uppercase text-muted-foreground tracking-wide">
+              Spots
+            </h3>
             <Button
               variant="ghost"
               size="xs"
@@ -594,7 +663,9 @@ export function Viewer({ store, index, onSaveAsMovie }: ViewerProps) {
 
           <div className="h-px bg-border" />
           <div className="flex flex-col gap-2">
-            <h3 className="font-medium text-xs uppercase text-muted-foreground tracking-wide">Masks</h3>
+            <h3 className="font-medium text-xs uppercase text-muted-foreground tracking-wide">
+              Masks
+            </h3>
             <Button
               variant="ghost"
               size="xs"
@@ -608,10 +679,18 @@ export function Viewer({ store, index, onSaveAsMovie }: ViewerProps) {
             {masksPath != null && (
               <>
                 <div className="flex items-center gap-1">
-                  <p className="text-xs text-muted-foreground truncate flex-1 min-w-0" title={masksPath}>
+                  <p
+                    className="text-xs text-muted-foreground truncate flex-1 min-w-0"
+                    title={masksPath}
+                  >
                     {masksPath.split(/[/\\]/).filter(Boolean).pop() ?? "Masks"}
                   </p>
-                  <Button variant="ghost" size="icon-xs" onClick={() => persistMasksPath(null)} title="Clear masks">
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    onClick={() => persistMasksPath(null)}
+                    title="Clear masks"
+                  >
                     ×
                   </Button>
                 </div>
@@ -651,6 +730,6 @@ export function Viewer({ store, index, onSaveAsMovie }: ViewerProps) {
     </div>
   );
 }
-  function canvasKey(posId: string, cropId: string): string {
-    return `${posId}:${cropId}`;
-  }
+function canvasKey(posId: string, cropId: string): string {
+  return `${posId}:${cropId}`;
+}

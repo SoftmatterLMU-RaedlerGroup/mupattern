@@ -20,20 +20,16 @@ interface PositionPickerProps {
   onConfirm: (selected: string[]) => void;
 }
 
-export function PositionPicker({
-  positions,
-  loading,
-  onConfirm,
-}: PositionPickerProps) {
+export function PositionPicker({ positions, loading, onConfirm }: PositionPickerProps) {
   const [selected, setSelected] = useState<Set<string>>(
-    () => new Set(positions.slice(0, MAX_POSITIONS))
+    () => new Set(positions.slice(0, MAX_POSITIONS)),
   );
   const [page, setPage] = useState(0);
 
   const totalPages = Math.ceil(positions.length / POS_PER_PAGE);
   const pagePositions = useMemo(
     () => positions.slice(page * POS_PER_PAGE, (page + 1) * POS_PER_PAGE),
-    [positions, page]
+    [positions, page],
   );
 
   const atLimit = selected.size >= MAX_POSITIONS;
@@ -95,8 +91,8 @@ export function PositionPicker({
         <DialogHeader>
           <DialogTitle>Select positions to load</DialogTitle>
           <DialogDescription>
-            Found {positions.length} position{positions.length !== 1 && "s"}.
-            Choose up to {MAX_POSITIONS} to load into the viewer.
+            Found {positions.length} position{positions.length !== 1 && "s"}. Choose up to{" "}
+            {MAX_POSITIONS} to load into the viewer.
           </DialogDescription>
         </DialogHeader>
 
@@ -113,7 +109,9 @@ export function PositionPicker({
           >
             Select none
           </button>
-          <span className={`text-sm tabular-nums ${atLimit ? "text-amber-500" : "text-muted-foreground"}`}>
+          <span
+            className={`text-sm tabular-nums ${atLimit ? "text-amber-500" : "text-muted-foreground"}`}
+          >
             {selected.size}/{MAX_POSITIONS}
           </span>
           {totalPages > 1 && (
@@ -137,9 +135,7 @@ export function PositionPicker({
               <label
                 key={posId}
                 className={`flex items-center gap-2 rounded px-2 py-1.5 text-sm ${
-                  disabled
-                    ? "cursor-not-allowed opacity-50"
-                    : "cursor-pointer hover:bg-accent"
+                  disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-accent"
                 }`}
               >
                 <Checkbox

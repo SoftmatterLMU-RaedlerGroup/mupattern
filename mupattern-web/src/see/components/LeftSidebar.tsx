@@ -1,13 +1,13 @@
-import { Button } from "@mupattern/shared"
-import { ChevronLeft, ChevronRight } from "lucide-react"
+import { Button } from "@mupattern/shared";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 interface LeftSidebarProps {
-  positions: string[]
-  validPos: string
-  onPositionChange: (posId: string) => void
-  numChannels: number
-  channel: number
-  onChannelChange: (ch: number) => void
+  positions: string[];
+  validPos: string;
+  onPositionChange: (posId: string) => void;
+  numChannels: number;
+  channel: number;
+  onChannelChange: (ch: number) => void;
 }
 
 export function LeftSidebar({
@@ -19,19 +19,19 @@ export function LeftSidebar({
   onChannelChange,
 }: LeftSidebarProps) {
   const handleChannelStep = (delta: -1 | 1) => {
-    const next = Math.max(0, Math.min(numChannels - 1, channel + delta))
-    if (next !== channel) onChannelChange(next)
-  }
+    const next = Math.max(0, Math.min(numChannels - 1, channel + delta));
+    if (next !== channel) onChannelChange(next);
+  };
 
-  const currentPosIndex = positions.indexOf(validPos)
+  const currentPosIndex = positions.indexOf(validPos);
   const handlePrevPos = () => {
-    if (currentPosIndex > 0) onPositionChange(positions[currentPosIndex - 1])
-  }
+    if (currentPosIndex > 0) onPositionChange(positions[currentPosIndex - 1]);
+  };
   const handleNextPos = () => {
     if (currentPosIndex >= 0 && currentPosIndex < positions.length - 1) {
-      onPositionChange(positions[currentPosIndex + 1])
+      onPositionChange(positions[currentPosIndex + 1]);
     }
-  }
+  };
 
   return (
     <aside className="w-64 flex-shrink-0 overflow-y-auto border-r border-border p-4 space-y-4">
@@ -39,9 +39,7 @@ export function LeftSidebar({
         <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
           Viewer Slice
         </h2>
-        <p className="text-xs text-muted-foreground mt-1">
-          Choose position and channel.
-        </p>
+        <p className="text-xs text-muted-foreground mt-1">Choose position and channel.</p>
       </div>
 
       <div className="space-y-3">
@@ -116,5 +114,5 @@ export function LeftSidebar({
         </div>
       </div>
     </aside>
-  )
+  );
 }

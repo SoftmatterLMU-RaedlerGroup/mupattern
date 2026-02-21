@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -6,20 +6,20 @@ import {
   DialogTitle,
   DialogFooter,
   Button,
-} from "@mupattern/shared"
-import { discoverStore } from "@/see/lib/zarr"
-import type { Workspace } from "@/workspace/store"
+} from "@mupattern/shared";
+import { discoverStore } from "@/see/lib/zarr";
+import type { Workspace } from "@/workspace/store";
 
 interface KillTaskConfigModalProps {
-  open: boolean
-  onClose: () => void
-  workspace: Workspace
+  open: boolean;
+  onClose: () => void;
+  workspace: Workspace;
   onCreate: (params: {
-    workspacePath: string
-    pos: number
-    modelPath: string
-    output: string
-  }) => void
+    workspacePath: string;
+    pos: number;
+    modelPath: string;
+    output: string;
+  }) => void;
 }
 
 export function KillTaskConfigModal({
@@ -28,48 +28,48 @@ export function KillTaskConfigModal({
   workspace,
   onCreate,
 }: KillTaskConfigModalProps) {
-  const rootPath = workspace.rootPath ?? ""
-  const defaultOutput = rootPath
-    ? `${rootPath.replace(/\/$/, "")}/predictions.csv`
-    : ""
+  const rootPath = workspace.rootPath ?? "";
+  const defaultOutput = rootPath ? `${rootPath.replace(/\/$/, "")}/predictions.csv` : "";
 
-  const [positions, setPositions] = useState<string[]>([])
-  const [loading, setLoading] = useState(false)
-  const [pos, setPos] = useState<string>("000")
-  const [modelPath, setModelPath] = useState("")
-  const [output, setOutput] = useState(defaultOutput)
+  const [positions, setPositions] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [pos, setPos] = useState<string>("000");
+  const [modelPath, setModelPath] = useState("");
+  const [output, setOutput] = useState(defaultOutput);
 
   useEffect(() => {
-    if (open) setOutput(defaultOutput)
-  }, [open, defaultOutput])
+    if (open) setOutput(defaultOutput);
+  }, [open, defaultOutput]);
 
   useEffect(() => {
-    if (!open || !rootPath) return
-    let cancelled = false
-    setLoading(true)
+    if (!open || !rootPath) return;
+    let cancelled = false;
+    setLoading(true);
     discoverStore(rootPath, undefined, { metadataMode: "fast" })
       .then((idx) => {
-        if (cancelled) return
-        setPositions(idx.positions)
+        if (cancelled) return;
+        setPositions(idx.positions);
         if (idx.positions.length > 0) {
-          setPos(idx.positions[0])
+          setPos(idx.positions[0]);
         }
       })
       .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => { cancelled = true }
-  }, [open, rootPath])
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, rootPath]);
 
   const handleBrowseModel = useCallback(async () => {
-    const result = await window.mupatternDesktop.tasks.pickKillModel()
-    if (result) setModelPath(result.path)
-  }, [])
+    const result = await window.mupatternDesktop.tasks.pickKillModel();
+    if (result) setModelPath(result.path);
+  }, []);
 
   const handleBrowseOutput = useCallback(async () => {
-    const result = await window.mupatternDesktop.tasks.pickExpressionOutput()
-    if (result) setOutput(result.path)
-  }, [])
+    const result = await window.mupatternDesktop.tasks.pickExpressionOutput();
+    if (result) setOutput(result.path);
+  }, []);
 
   const handleCreate = useCallback(() => {
     onCreate({
@@ -77,15 +77,12 @@ export function KillTaskConfigModal({
       pos: Number.parseInt(pos, 10),
       modelPath,
       output,
-    })
-    onClose()
-  }, [rootPath, pos, modelPath, output, onCreate, onClose])
+    });
+    onClose();
+  }, [rootPath, pos, modelPath, output, onCreate, onClose]);
 
   const canCreate =
-    rootPath &&
-    positions.length > 0 &&
-    modelPath.trim().length > 0 &&
-    output.trim().length > 0
+    rootPath && positions.length > 0 && modelPath.trim().length > 0 && output.trim().length > 0;
 
   return (
     <Dialog open={open} onOpenChange={(o) => (o ? undefined : onClose())}>
@@ -159,5 +156,5 @@ export function KillTaskConfigModal({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

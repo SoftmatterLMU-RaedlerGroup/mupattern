@@ -53,7 +53,6 @@ interface ViewerProps {
 }
 
 export function Viewer({ store, index }: ViewerProps) {
-
   // Persisted state from central store
   const selectedPos = useStore(mupatternStore, (s) => s.see.selectedPos);
   const t = useStore(mupatternStore, (s) => s.see.t);
@@ -68,31 +67,23 @@ export function Viewer({ store, index }: ViewerProps) {
   const showSpots = useStore(mupatternStore, (s) => s.see.showSpots);
 
   // Derive annotations Map from persisted entries
-  const annotations: Annotations = useMemo(
-    () => new Map(annotationEntries),
-    [annotationEntries]
-  );
+  const annotations: Annotations = useMemo(() => new Map(annotationEntries), [annotationEntries]);
 
   // Derive spots Map from persisted entries
-  const spots: SpotMap = useMemo(
-    () => new Map(spotEntries),
-    [spotEntries]
-  );
+  const spots: SpotMap = useMemo(() => new Map(spotEntries), [spotEntries]);
 
   // Ephemeral state
   const [playing, setPlaying] = useState(false);
   const [autoContrastDone, setAutoContrastDone] = useState(
     // If we have persisted contrast values that aren't defaults, skip auto
-    contrastMin !== 0 || contrastMax !== 65535
+    contrastMin !== 0 || contrastMax !== 65535,
   );
 
   const canvasRefs = useRef<Map<string, HTMLCanvasElement>>(new Map());
   const playIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Validate persisted selectedPos against available positions
-  const validPos = index.positions.includes(selectedPos)
-    ? selectedPos
-    : index.positions[0] ?? "";
+  const validPos = index.positions.includes(selectedPos) ? selectedPos : (index.positions[0] ?? "");
 
   // Sync if the persisted pos was invalid
   useEffect(() => {
@@ -120,23 +111,11 @@ export function Viewer({ store, index }: ViewerProps) {
   // Wrapped setters that persist
   const setT = useCallback((v: number) => persistT(v), []);
   const setPage = useCallback((v: number) => persistPage(v), []);
-  const setContrastMin = useCallback(
-    (v: number) => persistContrast(v, contrastMax),
-    [contrastMax]
-  );
-  const setContrastMax = useCallback(
-    (v: number) => persistContrast(contrastMin, v),
-    [contrastMin]
-  );
+  const setContrastMin = useCallback((v: number) => persistContrast(v, contrastMax), [contrastMax]);
+  const setContrastMax = useCallback((v: number) => persistContrast(contrastMin, v), [contrastMin]);
   const setAnnotating = useCallback((v: boolean) => persistAnnotating(v), []);
-  const setAnnotations = useCallback(
-    (a: Annotations) => persistAnnotations(a),
-    []
-  );
-  const setSpots = useCallback(
-    (s: SpotMap) => persistSpots(s),
-    []
-  );
+  const setAnnotations = useCallback((a: Annotations) => persistAnnotations(a), []);
+  const setSpots = useCallback((s: SpotMap) => persistSpots(s), []);
 
   // Playback
   useEffect(() => {
@@ -158,8 +137,8 @@ export function Viewer({ store, index }: ViewerProps) {
     async function loadPage() {
       const frames = await Promise.all(
         pageCrops.map((crop) =>
-          loadFrame(store, crop.posId, crop.cropId, clampedT, c).catch(() => null)
-        )
+          loadFrame(store, crop.posId, crop.cropId, clampedT, c).catch(() => null),
+        ),
       );
 
       if (cancelled) return;
@@ -194,7 +173,7 @@ export function Viewer({ store, index }: ViewerProps) {
           frame.width,
           frame.height,
           contrastMin,
-          contrastMax
+          contrastMax,
         );
         // Overlay spots
         if (showSpots) {
@@ -210,7 +189,18 @@ export function Viewer({ store, index }: ViewerProps) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store, validPos, clampedT, c, clampedPage, contrastMin, contrastMax, autoContrastDone, spots, showSpots]);
+  }, [
+    store,
+    validPos,
+    clampedT,
+    c,
+    clampedPage,
+    contrastMin,
+    contrastMax,
+    autoContrastDone,
+    spots,
+    showSpots,
+  ]);
 
   const setCanvasRef = useCallback(
     (cropId: string) => (el: HTMLCanvasElement | null) => {
@@ -220,7 +210,7 @@ export function Viewer({ store, index }: ViewerProps) {
         canvasRefs.current.delete(cropId);
       }
     },
-    []
+    [],
   );
 
   const resetAutoContrast = useCallback(() => {
@@ -252,7 +242,7 @@ export function Viewer({ store, index }: ViewerProps) {
       }
       setAnnotations(next);
     },
-    [validPos, clampedT, annotations, setAnnotations]
+    [validPos, clampedT, annotations, setAnnotations],
   );
 
   const handleSave = useCallback(() => {
@@ -316,21 +306,11 @@ export function Viewer({ store, index }: ViewerProps) {
 
   return (
     <div className="flex flex-col h-screen">
-      <AppHeader
-        title="See"
-        subtitle="Micropattern crop viewer"
-        backTo="/"
-        backLabel="Home"
-      />
+      <AppHeader title="See" subtitle="Micropattern crop viewer" backTo="/" backLabel="Home" />
 
       {/* Slider row */}
       <div className="px-4 py-1 border-b">
-        <Slider
-          min={0}
-          max={maxT}
-          value={[clampedT]}
-          onValueChange={([v]) => setT(v)}
-        />
+        <Slider min={0} max={maxT} value={[clampedT]} onValueChange={([v]) => setT(v)} />
       </div>
 
       {/* Frame controls + contrast */}
@@ -338,22 +318,47 @@ export function Viewer({ store, index }: ViewerProps) {
         <Button variant="ghost" size="icon-xs" onClick={() => setT(0)} disabled={clampedT === 0}>
           <SkipBack className="size-3" />
         </Button>
-        <Button variant="ghost" size="icon-xs" onClick={() => setT(Math.max(0, clampedT - 10))} disabled={clampedT === 0}>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          onClick={() => setT(Math.max(0, clampedT - 10))}
+          disabled={clampedT === 0}
+        >
           <ChevronsLeft className="size-3" />
         </Button>
-        <Button variant="ghost" size="icon-xs" onClick={() => setT(Math.max(0, clampedT - 1))} disabled={clampedT === 0}>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          onClick={() => setT(Math.max(0, clampedT - 1))}
+          disabled={clampedT === 0}
+        >
           <ChevronLeft className="size-3" />
         </Button>
         <Button variant="ghost" size="icon-xs" onClick={() => setPlaying(!playing)}>
           {playing ? <Pause className="size-3" /> : <Play className="size-3" />}
         </Button>
-        <Button variant="ghost" size="icon-xs" onClick={() => setT(Math.min(maxT, clampedT + 1))} disabled={clampedT >= maxT}>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          onClick={() => setT(Math.min(maxT, clampedT + 1))}
+          disabled={clampedT >= maxT}
+        >
           <ChevronRight className="size-3" />
         </Button>
-        <Button variant="ghost" size="icon-xs" onClick={() => setT(Math.min(maxT, clampedT + 10))} disabled={clampedT >= maxT}>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          onClick={() => setT(Math.min(maxT, clampedT + 10))}
+          disabled={clampedT >= maxT}
+        >
           <ChevronsRight className="size-3" />
         </Button>
-        <Button variant="ghost" size="icon-xs" onClick={() => setT(maxT)} disabled={clampedT >= maxT}>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          onClick={() => setT(maxT)}
+          disabled={clampedT >= maxT}
+        >
           <SkipForward className="size-3" />
         </Button>
 
@@ -423,7 +428,9 @@ export function Viewer({ store, index }: ViewerProps) {
         <aside className="w-48 border-l border-border p-3 flex flex-col gap-4 text-sm overflow-y-auto">
           {/* Annotations section */}
           <div className="flex flex-col gap-2">
-            <h3 className="font-medium text-xs uppercase text-muted-foreground tracking-wide">Annotations</h3>
+            <h3 className="font-medium text-xs uppercase text-muted-foreground tracking-wide">
+              Annotations
+            </h3>
             <Button
               variant={annotating ? "default" : "ghost"}
               size="xs"
@@ -435,10 +442,21 @@ export function Viewer({ store, index }: ViewerProps) {
               {annotating ? "Annotating" : "Annotate"}
             </Button>
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="icon-xs" onClick={handleLoad} title="Load annotations CSV">
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={handleLoad}
+                title="Load annotations CSV"
+              >
                 <Upload className="size-3.5" />
               </Button>
-              <Button variant="ghost" size="icon-xs" onClick={handleSave} title="Save annotations CSV" disabled={annotations.size === 0}>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={handleSave}
+                title="Save annotations CSV"
+                disabled={annotations.size === 0}
+              >
                 <Download className="size-3.5" />
               </Button>
               <span className="text-muted-foreground tabular-nums text-xs">
@@ -462,7 +480,9 @@ export function Viewer({ store, index }: ViewerProps) {
 
           {/* Spots section */}
           <div className="flex flex-col gap-2">
-            <h3 className="font-medium text-xs uppercase text-muted-foreground tracking-wide">Spots</h3>
+            <h3 className="font-medium text-xs uppercase text-muted-foreground tracking-wide">
+              Spots
+            </h3>
             <Button
               variant="ghost"
               size="xs"
@@ -495,23 +515,41 @@ export function Viewer({ store, index }: ViewerProps) {
 
       {/* Pagination */}
       <div className="flex items-center justify-center gap-4 px-4 py-2 border-t">
-        <span className="text-sm text-muted-foreground">
-          {crops.length} crops
-        </span>
+        <span className="text-sm text-muted-foreground">{crops.length} crops</span>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon-xs" disabled={clampedPage === 0} onClick={() => setPage(0)}>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            disabled={clampedPage === 0}
+            onClick={() => setPage(0)}
+          >
             <SkipBack className="size-3" />
           </Button>
-          <Button variant="ghost" size="icon-xs" disabled={clampedPage === 0} onClick={() => setPage(clampedPage - 1)}>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            disabled={clampedPage === 0}
+            onClick={() => setPage(clampedPage - 1)}
+          >
             <ChevronLeft className="size-3" />
           </Button>
           <span className="text-sm tabular-nums">
             Page {clampedPage + 1} / {totalPages}
           </span>
-          <Button variant="ghost" size="icon-xs" disabled={clampedPage >= totalPages - 1} onClick={() => setPage(clampedPage + 1)}>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            disabled={clampedPage >= totalPages - 1}
+            onClick={() => setPage(clampedPage + 1)}
+          >
             <ChevronRight className="size-3" />
           </Button>
-          <Button variant="ghost" size="icon-xs" disabled={clampedPage >= totalPages - 1} onClick={() => setPage(totalPages - 1)}>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            disabled={clampedPage >= totalPages - 1}
+            onClick={() => setPage(totalPages - 1)}
+          >
             <SkipForward className="size-3" />
           </Button>
         </div>

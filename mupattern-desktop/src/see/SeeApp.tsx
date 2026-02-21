@@ -31,17 +31,13 @@ export default function SeeApp() {
     }) => {
       void createMovieTask(params);
     },
-    []
+    [],
   );
 
   if (store && index) {
     return (
       <>
-        <Viewer
-          store={store}
-          index={index}
-          onSaveAsMovie={handleOpenMovieModal}
-        />
+        <Viewer store={store} index={index} onSaveAsMovie={handleOpenMovieModal} />
         {activeWorkspace && (
           <MovieTaskConfigModal
             key={activeWorkspace.id}

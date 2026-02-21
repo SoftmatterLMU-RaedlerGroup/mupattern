@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -6,17 +6,17 @@ import {
   DialogTitle,
   DialogFooter,
   Button,
-} from "@mupattern/shared"
-import type { Workspace } from "@/workspace/store"
+} from "@mupattern/shared";
+import type { Workspace } from "@/workspace/store";
 
 interface CropTaskConfigModalProps {
-  open: boolean
-  onClose: () => void
-  workspace: Workspace
-  onCreate: (pos: number, destination: string, background: boolean) => void
-  positionsWithBbox: number[]
+  open: boolean;
+  onClose: () => void;
+  workspace: Workspace;
+  onCreate: (pos: number, destination: string, background: boolean) => void;
+  positionsWithBbox: number[];
   /** Pre-select this position when opening (e.g. from context menu). */
-  initialPos?: number
+  initialPos?: number;
 }
 
 export function CropTaskConfigModal({
@@ -27,33 +27,30 @@ export function CropTaskConfigModal({
   positionsWithBbox,
   initialPos,
 }: CropTaskConfigModalProps) {
-  const rootPath = workspace.rootPath ?? ""
-  const defaultDestination = rootPath ? `${rootPath.replace(/\/$/, "")}/crops.zarr` : ""
+  const rootPath = workspace.rootPath ?? "";
+  const defaultDestination = rootPath ? `${rootPath.replace(/\/$/, "")}/crops.zarr` : "";
 
   const [pos, setPos] = useState<number>(
-    () => initialPos ?? positionsWithBbox[0] ?? workspace.positions[0] ?? 0
-  )
+    () => initialPos ?? positionsWithBbox[0] ?? workspace.positions[0] ?? 0,
+  );
   useEffect(() => {
-    if (open && initialPos != null) setPos(initialPos)
-  }, [open, initialPos])
-  const [destination, setDestination] = useState(defaultDestination)
-  const [background, setBackground] = useState(false)
+    if (open && initialPos != null) setPos(initialPos);
+  }, [open, initialPos]);
+  const [destination, setDestination] = useState(defaultDestination);
+  const [background, setBackground] = useState(false);
 
   const handleBrowse = useCallback(async () => {
-    const result = await window.mupatternDesktop.tasks.pickCropsDestination()
-    if (result) setDestination(result.path)
-  }, [])
+    const result = await window.mupatternDesktop.tasks.pickCropsDestination();
+    if (result) setDestination(result.path);
+  }, []);
 
   const handleCreate = useCallback(() => {
-    onCreate(pos, destination, background)
-    onClose()
-  }, [pos, destination, background, onCreate, onClose])
+    onCreate(pos, destination, background);
+    onClose();
+  }, [pos, destination, background, onCreate, onClose]);
 
   const canCreate =
-    rootPath &&
-    pos >= 0 &&
-    destination.trim().length > 0 &&
-    positionsWithBbox.includes(pos)
+    rootPath && pos >= 0 && destination.trim().length > 0 && positionsWithBbox.includes(pos);
 
   return (
     <Dialog open={open} onOpenChange={(o) => (o ? undefined : onClose())}>
@@ -119,5 +116,5 @@ export function CropTaskConfigModal({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

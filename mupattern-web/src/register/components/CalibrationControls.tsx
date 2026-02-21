@@ -1,16 +1,16 @@
-import { Input, Label, Slider, Button } from "@mupattern/shared"
-import type { Calibration } from "@mupattern/shared/register/types"
+import { Input, Label, Slider, Button } from "@mupattern/shared";
+import type { Calibration } from "@mupattern/shared/register/types";
 
 interface CalibrationControlsProps {
-  calibration: Calibration
-  onChange: (cal: Calibration) => void
+  calibration: Calibration;
+  onChange: (cal: Calibration) => void;
 }
 
 const PRESETS = [
   { label: "10x", umPerPixel: 0.65 },
   { label: "20x", umPerPixel: 0.325 },
   { label: "40x", umPerPixel: 0.1625 },
-] as const
+] as const;
 
 export function CalibrationControls({ calibration, onChange }: CalibrationControlsProps) {
   return (
@@ -25,8 +25,8 @@ export function CalibrationControls({ calibration, onChange }: CalibrationContro
             step={0.001}
             value={Number(calibration.umPerPixel.toFixed(4))}
             onChange={(e) => {
-              const v = parseFloat(e.target.value)
-              if (v > 0) onChange({ umPerPixel: v })
+              const v = parseFloat(e.target.value);
+              if (v > 0) onChange({ umPerPixel: v });
             }}
             className="h-6 w-20 text-base text-right"
           />
@@ -53,5 +53,5 @@ export function CalibrationControls({ calibration, onChange }: CalibrationContro
         ))}
       </div>
     </div>
-  )
+  );
 }

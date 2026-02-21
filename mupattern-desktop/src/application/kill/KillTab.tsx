@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react"
-import { useNavigate } from "react-router-dom"
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   LineChart,
   Line,
@@ -9,127 +9,126 @@ import {
   YAxis,
   CartesianGrid,
   ResponsiveContainer,
-} from "recharts"
-import { Button } from "@mupattern/shared"
-import type { Workspace } from "@/workspace/store"
+} from "recharts";
+import { Button } from "@mupattern/shared";
+import type { Workspace } from "@/workspace/store";
 
 interface KillRow {
-  t: number
-  crop: string
-  label: boolean
+  t: number;
+  crop: string;
+  label: boolean;
 }
 
 interface KillTask {
-  id: string
-  kind: string
-  status: string
-  request: { pos?: number; output?: string }
-  result: { output: string; rows: KillRow[] } | null
+  id: string;
+  kind: string;
+  status: string;
+  request: { pos?: number; output?: string };
+  result: { output: string; rows: KillRow[] } | null;
 }
 
 interface KillTabProps {
-  workspace: Workspace
-  initialRows?: KillRow[] | null
+  workspace: Workspace;
+  initialRows?: KillRow[] | null;
 }
 
 function applyClean(rows: KillRow[]): KillRow[] {
-  const byCrop = new Map<string, KillRow[]>()
+  const byCrop = new Map<string, KillRow[]>();
   for (const r of rows) {
-    let arr = byCrop.get(r.crop)
+    let arr = byCrop.get(r.crop);
     if (!arr) {
-      arr = []
-      byCrop.set(r.crop, arr)
+      arr = [];
+      byCrop.set(r.crop, arr);
     }
-    arr.push(r)
+    arr.push(r);
   }
-  const result: KillRow[] = []
+  const result: KillRow[] = [];
   for (const [, arr] of byCrop) {
-    arr.sort((a, b) => a.t - b.t)
-    let seenFalse = false
+    arr.sort((a, b) => a.t - b.t);
+    let seenFalse = false;
     for (const row of arr) {
-      if (!row.label) seenFalse = true
-      else if (seenFalse) result.push({ ...row, label: false })
-      else result.push(row)
+      if (!row.label) seenFalse = true;
+      else if (seenFalse) result.push({ ...row, label: false });
+      else result.push(row);
     }
   }
-  result.sort((a, b) => (a.t !== b.t ? a.t - b.t : a.crop.localeCompare(b.crop)))
-  return result
+  result.sort((a, b) => (a.t !== b.t ? a.t - b.t : a.crop.localeCompare(b.crop)));
+  return result;
 }
 
 export function KillTab({ workspace: _workspace, initialRows }: KillTabProps) {
-  const navigate = useNavigate()
-  const [rows, setRows] = useState<KillRow[] | null>(initialRows ?? null)
-  const [cleaned, setCleaned] = useState(false)
-  const [tasks, setTasks] = useState<KillTask[]>([])
-  const [loadingTasks, setLoadingTasks] = useState(false)
+  const navigate = useNavigate();
+  const [rows, setRows] = useState<KillRow[] | null>(initialRows ?? null);
+  const [cleaned, setCleaned] = useState(false);
+  const [tasks, setTasks] = useState<KillTask[]>([]);
+  const [loadingTasks, setLoadingTasks] = useState(false);
 
   useEffect(() => {
-    if (initialRows && initialRows.length > 0) setRows(initialRows)
-  }, [initialRows])
+    if (initialRows && initialRows.length > 0) setRows(initialRows);
+  }, [initialRows]);
 
   useEffect(() => {
-    let cancelled = false
-    setLoadingTasks(true)
+    let cancelled = false;
+    setLoadingTasks(true);
     window.mupatternDesktop.tasks
       .listTasks()
       .then((list) => {
-        if (cancelled) return
+        if (cancelled) return;
         const kill = (list as unknown as KillTask[]).filter(
-          (t) => t.kind === "kill.predict" && t.status === "succeeded" && t.result?.rows?.length
-        )
-        setTasks(kill)
+          (t) => t.kind === "kill.predict" && t.status === "succeeded" && t.result?.rows?.length,
+        );
+        setTasks(kill);
       })
       .finally(() => {
-        if (!cancelled) setLoadingTasks(false)
-      })
-    return () => { cancelled = true }
-  }, [])
+        if (!cancelled) setLoadingTasks(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const displayRows = useMemo(() => {
-    if (!rows) return null
-    return cleaned ? applyClean(rows) : rows
-  }, [rows, cleaned])
+    if (!rows) return null;
+    return cleaned ? applyClean(rows) : rows;
+  }, [rows, cleaned]);
 
   const { curveData, deathTimes } = useMemo((): {
-    curveData: Array<{ t: number; n: number }>
-    deathTimes: number[]
+    curveData: Array<{ t: number; n: number }>;
+    deathTimes: number[];
   } => {
-    if (!displayRows || displayRows.length === 0)
-      return { curveData: [], deathTimes: [] }
-    const byT = new Map<number, number>()
-    const deaths: number[] = []
-    const byCrop = new Map<string, KillRow[]>()
+    if (!displayRows || displayRows.length === 0) return { curveData: [], deathTimes: [] };
+    const byT = new Map<number, number>();
+    const deaths: number[] = [];
+    const byCrop = new Map<string, KillRow[]>();
     for (const r of displayRows) {
-      let arr = byCrop.get(r.crop)
+      let arr = byCrop.get(r.crop);
       if (!arr) {
-        arr = []
-        byCrop.set(r.crop, arr)
+        arr = [];
+        byCrop.set(r.crop, arr);
       }
-      arr.push(r)
+      arr.push(r);
     }
     for (const [, arr] of byCrop) {
-      arr.sort((a, b) => a.t - b.t)
-      const firstFalse = arr.find((r) => !r.label)
-      if (firstFalse && firstFalse.t > 0) deaths.push(firstFalse.t)
+      arr.sort((a, b) => a.t - b.t);
+      const firstFalse = arr.find((r) => !r.label);
+      if (firstFalse && firstFalse.t > 0) deaths.push(firstFalse.t);
     }
     for (const r of displayRows) {
-      if (!byT.has(r.t)) byT.set(r.t, 0)
-      if (r.label) byT.set(r.t, byT.get(r.t)! + 1)
+      if (!byT.has(r.t)) byT.set(r.t, 0);
+      if (r.label) byT.set(r.t, byT.get(r.t)! + 1);
     }
-    const curveData = [...byT.entries()]
-      .sort((a, b) => a[0] - b[0])
-      .map(([t, n]) => ({ t, n }))
-    return { curveData, deathTimes }
-  }, [displayRows])
+    const curveData = [...byT.entries()].sort((a, b) => a[0] - b[0]).map(([t, n]) => ({ t, n }));
+    return { curveData, deathTimes };
+  }, [displayRows]);
 
   const histData = useMemo(() => {
-    if (deathTimes.length === 0) return []
-    const maxT = Math.max(...deathTimes, 1)
-    const bins = new Map<number, number>()
-    for (let t = 1; t <= maxT; t++) bins.set(t, 0)
-    for (const t of deathTimes) bins.set(t, (bins.get(t) ?? 0) + 1)
-    return [...bins.entries()].map(([t, n]) => ({ t, n }))
-  }, [deathTimes])
+    if (deathTimes.length === 0) return [];
+    const maxT = Math.max(...deathTimes, 1);
+    const bins = new Map<number, number>();
+    for (let t = 1; t <= maxT; t++) bins.set(t, 0);
+    for (const t of deathTimes) bins.set(t, (bins.get(t) ?? 0) + 1);
+    return [...bins.entries()].map(([t, n]) => ({ t, n }));
+  }, [deathTimes]);
 
   return (
     <div className="space-y-6">
@@ -190,10 +189,7 @@ export function KillTab({ workspace: _workspace, initialRows }: KillTabProps) {
               <h3 className="text-sm font-medium mb-2">Kill curve (n cells present)</h3>
               <div className="h-64 [&_*]:pointer-events-none">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart
-                    data={curveData}
-                    margin={{ top: 5, right: 5, left: 5, bottom: 5 }}
-                  >
+                  <LineChart data={curveData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                     <XAxis dataKey="t" tick={{ fontSize: 12 }} />
                     <YAxis tick={{ fontSize: 12 }} />
@@ -226,5 +222,5 @@ export function KillTab({ workspace: _workspace, initialRows }: KillTabProps) {
         </div>
       )}
     </div>
-  )
+  );
 }

@@ -14,14 +14,14 @@ function getInitSeeSession() {
 
 export function useZarrStore() {
   const [store, setStore] = useState<DirectoryStore | null>(
-    () => getInitSeeSession()?.store ?? null
+    () => getInitSeeSession()?.store ?? null,
   );
   const [dirHandle, setDirHandle] = useState<FileSystemDirectoryHandle | null>(
-    () => getInitSeeSession()?.dirHandle ?? null
+    () => getInitSeeSession()?.dirHandle ?? null,
   );
   const [index, setIndex] = useState<StoreIndex | null>(null);
   const [availablePositions, setAvailablePositions] = useState<string[] | null>(
-    () => getInitSeeSession()?.availablePositions ?? null
+    () => getInitSeeSession()?.availablePositions ?? null,
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +30,7 @@ export function useZarrStore() {
     () => () => {
       initSession = undefined;
     },
-    []
+    [],
   );
 
   /** Phase 1: Open directory and quickly list available positions. */
@@ -89,7 +89,7 @@ export function useZarrStore() {
         setLoading(false);
       }
     },
-    [dirHandle, store]
+    [dirHandle, store],
   );
 
   return {

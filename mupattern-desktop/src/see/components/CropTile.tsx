@@ -38,9 +38,15 @@ export const CropTile = memo(function CropTile({
 
         if (crop.cropId === "000") {
           const d = frame.data;
-          let mn = d[0], mx = d[0];
-          for (let i = 1; i < d.length; i++) { if (d[i] < mn) mn = d[i]; if (d[i] > mx) mx = d[i]; }
-          console.log(`crop 000 t=${t}: len=${d.length} w=${frame.width} h=${frame.height} min=${mn} max=${mx} contrast=[${contrastMin},${contrastMax}]`);
+          let mn = d[0],
+            mx = d[0];
+          for (let i = 1; i < d.length; i++) {
+            if (d[i] < mn) mn = d[i];
+            if (d[i] > mx) mx = d[i];
+          }
+          console.log(
+            `crop 000 t=${t}: len=${d.length} w=${frame.width} h=${frame.height} min=${mn} max=${mx} contrast=[${contrastMin},${contrastMax}]`,
+          );
         }
 
         // Auto-contrast on first load if not yet set
@@ -48,14 +54,7 @@ export const CropTile = memo(function CropTile({
           const [lo, hi] = autoContrast(frame.data);
           onAutoContrast?.(lo, hi);
           if (canvasRef.current) {
-            renderUint16ToCanvas(
-              canvasRef.current,
-              frame.data,
-              frame.width,
-              frame.height,
-              lo,
-              hi
-            );
+            renderUint16ToCanvas(canvasRef.current, frame.data, frame.width, frame.height, lo, hi);
           }
         } else if (canvasRef.current) {
           renderUint16ToCanvas(
@@ -64,7 +63,7 @@ export const CropTile = memo(function CropTile({
             frame.width,
             frame.height,
             contrastMin,
-            contrastMax
+            contrastMax,
           );
         }
       } catch (e) {
@@ -83,9 +82,7 @@ export const CropTile = memo(function CropTile({
   return (
     <div
       className={`relative cursor-pointer border-2 transition-colors ${
-        selected
-          ? "border-primary"
-          : "border-transparent hover:border-muted-foreground/30"
+        selected ? "border-primary" : "border-transparent hover:border-muted-foreground/30"
       }`}
       onClick={onClick}
     >
