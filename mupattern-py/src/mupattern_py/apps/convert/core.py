@@ -7,6 +7,7 @@ from pathlib import Path
 
 import tifffile
 
+from ...common.nd2_utils import read_frame_2d
 from ...common.slices import parse_slice_string
 from ...common.progress import ProgressCallback
 
@@ -28,9 +29,6 @@ def run_convert(
     n_time = sizes.get("T", 1)
     n_chan = sizes.get("C", 1)
     n_z = sizes.get("Z", 1)
-
-    dim_order = [d for d in sizes.keys() if d not in ("Y", "X")]
-    dask_arr = f.to_dask()
 
     pos_indices = parse_slice_string(pos_slice, n_pos)
     time_indices = parse_slice_string(time_slice, n_time)
@@ -59,9 +57,7 @@ def run_convert(
         for t_new, t_orig in enumerate(time_indices):
             for c in range(n_chan):
                 for z in range(n_z):
-                    coords = {"P": p_idx, "T": t_orig, "C": c, "Z": z}
-                    idx = tuple(coords.get(d, 0) for d in dim_order)
-                    frame = dask_arr[idx].compute()
+                    frame = read_frame_2d(f, p_idx, t_orig, c, z)
 
                     fname = (
                         f"img_channel{c:03d}"
