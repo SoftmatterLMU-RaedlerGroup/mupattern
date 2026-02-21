@@ -6,15 +6,15 @@
 
 ## Project structure
 
-- **Root** `pyproject.toml` defines a uv workspace; Python package: `muapplication`
-- Run Python CLIs from repo root: `uv run muapplication --help` and domain subcommands like `uv run muapplication file --help`.
-- **muapplication** (pure Python CLI, reference): domains `file` (convert, crop), `kill` (dataset, train, predict, clean, plot), `expression` (analyze, plot), `tissue` (segment, analyze, plot), `spot` (detect, plot). Prod code lives in mustudio (Rust binary + ONNX).
+- **Root** `pyproject.toml` defines a uv workspace; Python package: `mupattern-py`
+- Run Python CLIs from repo root: `uv run mupattern --help` and domain subcommands like `uv run mupattern file --help`.
+- **mupattern-py** (pure Python CLI, reference): domains `file` (convert, crop), `kill` (dataset, train, predict, clean, plot), `expression` (analyze, plot), `tissue` (segment, analyze, plot), `spot` (detect, plot). Prod code lives in mupattern-desktop (Rust binary + ONNX).
 - **crops.zarr** layout: `pos/{pos:03d}/crop/{crop_id}` arrays (T, C, Z, H, W); optional `pos/{pos:03d}/background` (T, C, Z) per-pixel. Expression CSV: `t,crop,intensity,area,background`. Tissue: `segment` writes **masks.zarr** (same pos/crop keys, arrays (T, H, W) uint32); `analyze` reads crops + masks, writes CSV `t,crop,cell,total_fluorescence,cell_area,background`; `plot` uses `(total_fluorescence/cell_area)-background > gfp_threshold` for GFP+.
-- JS app (web): `mupattern` — lite web app (landing, register, see), deployed on Firebase; run with `bun run dev` from that directory
-- JS app (desktop): `mustudio` — Electron workspace-first app; run with `bun run dev` from that directory
+- JS app (web): `mupattern-web` — lite web app (landing, register, see), deployed on Firebase; run with `bun run dev` from that directory
+- JS app (desktop): `mupattern-desktop` — Electron workspace-first app; run with `bun run dev` from that directory
 
 ## Product direction
 
-- `mupattern` is frozen/maintenance-only. Avoid feature work unless explicitly requested; only apply critical fixes/docs tweaks.
-- New feature development should go to `mustudio`.
+- `mupattern-web` is frozen/maintenance-only. Avoid feature work unless explicitly requested; only apply critical fixes/docs tweaks.
+- New feature development should go to `mupattern-desktop`.
 

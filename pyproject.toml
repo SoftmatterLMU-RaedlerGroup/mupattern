@@ -4,14 +4,14 @@ version = "0.1.0"
 description = "Micropattern analysis tools"
 requires-python = ">=3.12"
 dependencies = [
-    "muapplication",
+    "mupattern-py",
 ]
 
 [dependency-groups]
 dev = ["pytest>=8"]
 
 [tool.uv.workspace]
-members = ["muapplication"]
+members = ["mupattern-py"]
 
 [tool.uv.sources]
-muapplication = { workspace = true }
+mupattern-py = { workspace = true }

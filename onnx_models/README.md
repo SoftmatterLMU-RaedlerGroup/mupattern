@@ -1,6 +1,6 @@
-# ONNX models for mustudio
+# ONNX models for mupattern-desktop
 
-Pre-exported ONNX models for running inference in mustudio without Python.
+Pre-exported ONNX models for running inference in mupattern-desktop without Python.
 
 ## mupattern-resnet18
 
