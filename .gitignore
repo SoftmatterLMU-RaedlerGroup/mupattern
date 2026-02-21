@@ -4,6 +4,8 @@ node_modules/
 # Build output
 dist/
 build/
+electron-dist/
+target/
 
 # Lockfiles (optional - can be committed)
 bun.lock
@@ -11,6 +13,7 @@ bun.lock
 # Editor/IDE
 .idea/
 .vscode/
+.cursor/
 *.swp
 *.swo
 *~
