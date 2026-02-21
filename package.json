@@ -1,4 +1,7 @@
 {
   "private": true,
-  "workspaces": ["mupattern", "mustudio", "packages/shared"]
+  "workspaces": ["mupattern", "mustudio", "packages/shared"],
+  "scripts": {
+    "build:mupattern": "cargo build --release --manifest-path packages/mupattern-cli/Cargo.toml"
+  }
 }

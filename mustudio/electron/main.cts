@@ -258,6 +258,77 @@ function getWorkspaceDbPath(): string {
   return path.join(app.getPath("userData"), WORKSPACE_DB_FILENAME)
 }
 
+function getMupatternBinPath(): string {
+  const exe = process.platform === "win32" ? "mupattern.exe" : "mupattern"
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, "bin", exe)
+  }
+  return path.join(__dirname, "..", "..", "packages", "mupattern-cli", "target", "release", exe)
+}
+
+async function parseExpressionCsv(csvPath: string): Promise<ExpressionAnalyzeRow[]> {
+  try {
+    const content = await readFile(csvPath, "utf8")
+    const lines = content.trim().split("\n")
+    if (lines.length < 2) return []
+    const rows: ExpressionAnalyzeRow[] = []
+    for (let i = 1; i < lines.length; i++) {
+      const parts = lines[i].split(",")
+      if (parts.length >= 5) {
+        rows.push({
+          t: Number.parseInt(parts[0], 10),
+          crop: parts[1].trim(),
+          intensity: Number.parseInt(parts[2], 10),
+          area: Number.parseInt(parts[3], 10),
+          background: Number.parseFloat(parts[4]),
+        })
+      }
+    }
+    return rows
+  } catch {
+    return []
+  }
+}
+
+async function runMupatternSubprocess(
+  args: string[],
+  sendProgress: (progress: number, message: string) => void
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const binPath = getMupatternBinPath()
+  return new Promise((resolve) => {
+    const proc = spawn(binPath, args, { stdio: ["ignore", "pipe", "pipe"] })
+    let stderr = ""
+    proc.stderr?.on("data", (chunk: Buffer) => {
+      const s = chunk.toString("utf8")
+      stderr += s
+      const lines = s.split("\n")
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed) continue
+        try {
+          const obj = JSON.parse(trimmed) as { progress?: number; message?: string }
+          if (typeof obj.progress === "number" && typeof obj.message === "string") {
+            sendProgress(obj.progress, obj.message)
+          }
+        } catch {
+          // not JSON, ignore
+        }
+      }
+    })
+    proc.on("close", (code) => {
+      if (code === 0) {
+        resolve({ ok: true })
+      } else {
+        const errMsg = stderr.trim().split("\n").pop() ?? `Process exited with code ${code}`
+        resolve({ ok: false, error: errMsg })
+      }
+    })
+    proc.on("error", (err) => {
+      resolve({ ok: false, error: err.message })
+    })
+  })
+}
+
 function posDirName(pos: number): string {
   return `Pos${pos}`
 }
@@ -387,543 +458,6 @@ async function saveBboxCsvToWorkspace({ workspacePath, pos, csv }: SaveBboxCsvRe
   const filePath = path.join(workspacePath, `${posDirName(pos)}_bbox.csv`)
   await writeFile(filePath, csv, "utf8")
   return true
-}
-
-/** Parse bbox CSV: crop,x,y,w,h */
-function parseBboxCsv(csvText: string): Array<{ crop: number; x: number; y: number; w: number; h: number }> {
-  const lines = csvText.trim().split("\n")
-  if (lines.length < 2) return []
-  const header = lines[0].split(",").map((s) => s.trim().toLowerCase())
-  const cropIdx = header.indexOf("crop")
-  const xIdx = header.indexOf("x")
-  const yIdx = header.indexOf("y")
-  const wIdx = header.indexOf("w")
-  const hIdx = header.indexOf("h")
-  if (cropIdx < 0 || xIdx < 0 || yIdx < 0 || wIdx < 0 || hIdx < 0) return []
-  const rows: Array<{ crop: number; x: number; y: number; w: number; h: number }> = []
-  for (let i = 1; i < lines.length; i++) {
-    const parts = lines[i].split(",")
-    if (parts.length <= Math.max(cropIdx, xIdx, yIdx, wIdx, hIdx)) continue
-    rows.push({
-      crop: Number.parseInt(parts[cropIdx], 10),
-      x: Number.parseInt(parts[xIdx], 10),
-      y: Number.parseInt(parts[yIdx], 10),
-      w: Number.parseInt(parts[wIdx], 10),
-      h: Number.parseInt(parts[hIdx], 10),
-    })
-  }
-  return rows
-}
-
-/** Discover TIFFs in pos dir. Returns (c,t,z) -> filepath */
-async function discoverTiffsAsync(
-  posDirPath: string,
-  pos: number
-): Promise<Map<string, string>> {
-  const index = new Map<string, string>()
-  const entries = await readdir(posDirPath, { withFileTypes: true })
-  for (const entry of entries) {
-    if (!entry.isFile()) continue
-    const match = entry.name.match(TIFF_RE)
-    if (!match) continue
-    const filePos = Number.parseInt(match[2], 10)
-    if (filePos !== pos) continue
-    const c = Number.parseInt(match[1], 10)
-    const t = Number.parseInt(match[3], 10)
-    const z = Number.parseInt(match[4], 10)
-    index.set(`${c},${t},${z}`, path.join(posDirPath, entry.name))
-  }
-  return index
-}
-
-/** Read raw frame from TIFF as TypedArray. Returns { data, width, height, bytesPerPixel } */
-async function readTiffFrameRaw(filePath: string): Promise<{
-  data: Uint8Array | Uint16Array
-  width: number
-  height: number
-  bytesPerPixel: number
-  dtype: string
-}> {
-  const fileBytes = await readFile(filePath)
-  const buffer = toArrayBuffer(fileBytes)
-  const ifds = UTIF.decode(buffer)
-  if (ifds.length === 0) throw new Error("Could not decode TIFF")
-  UTIF.decodeImage(buffer, ifds[0])
-  const img = ifds[0]
-  const w = img.width
-  const h = img.height
-  const dataU8 = img.data as Uint8Array
-  const bps = (img["t258"] != null ? (img["t258"] as number[])[0] : 8)
-  const smpls = (img["t277"] != null ? (img["t277"] as number[])[0] : 1)
-  const bytesPerPixel = Math.ceil((bps * smpls) / 8)
-
-  if (bps === 16 && bytesPerPixel >= 2) {
-    const nPixels = w * h * smpls
-    const view = new Uint16Array(dataU8.buffer, dataU8.byteOffset, nPixels)
-    return { data: view, width: w, height: h, bytesPerPixel: 2, dtype: "<u2" }
-  }
-  return { data: dataU8, width: w, height: h, bytesPerPixel: 1, dtype: "|u1" }
-}
-
-/** Extract crop region from frame. Frame is row-major, width x height. Returns buffer for zarr chunk. */
-function extractCrop(
-  frame: Uint8Array | Uint16Array,
-  frameWidth: number,
-  _frameHeight: number,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  bytesPerPixel: number
-): ArrayBuffer {
-  if (bytesPerPixel === 1) {
-    const out = new Uint8Array(w * h)
-    for (let r = 0; r < h; r++) {
-      const srcStart = (y + r) * frameWidth + x
-      out.set(
-        (frame as Uint8Array).subarray(srcStart, srcStart + w),
-        r * w
-      )
-    }
-    return out.buffer
-  }
-  const out = new Uint16Array(w * h)
-  const f16 = frame instanceof Uint16Array ? frame : new Uint16Array(frame.buffer, frame.byteOffset, frame.byteLength / 2)
-  for (let r = 0; r < h; r++) {
-    const srcStart = (y + r) * frameWidth + x
-    out.set(f16.subarray(srcStart, srcStart + w), r * w)
-  }
-  return out.buffer
-}
-
-/** Compute median of pixels outside mask. Mask is (H,W) bool, frame is (H,W). */
-function medianOutsideMask(
-  frame: Uint8Array | Uint16Array,
-  width: number,
-  height: number,
-  mask: boolean[]
-): number {
-  const values: number[] = []
-  const n = width * height
-  for (let i = 0; i < n; i++) {
-    if (mask[i]) continue
-    const v = frame instanceof Uint16Array ? frame[i] : frame[i]
-    values.push(v)
-  }
-  if (values.length === 0) return 0
-  values.sort((a, b) => a - b)
-  const mid = Math.floor(values.length / 2)
-  return values.length % 2 === 1 ? values[mid] : (values[mid - 1] + values[mid]) / 2
-}
-
-async function runCrop(
-  request: RunCropRequest,
-  sendProgress: (progress: number, message: string) => void
-): Promise<RunCropResponse> {
-  const { input_dir, pos, bbox: bboxPath, output, background } = request
-  const posDir = path.join(input_dir, posDirName(pos))
-
-  try {
-    await access(posDir, constants.R_OK)
-  } catch {
-    return { ok: false, error: `Position directory not found: ${posDir}` }
-  }
-
-  let bboxCsv: string
-  try {
-    bboxCsv = await readFile(bboxPath, "utf8")
-  } catch {
-    return { ok: false, error: `Could not read bbox CSV: ${bboxPath}` }
-  }
-
-  const bboxes = parseBboxCsv(bboxCsv)
-  if (bboxes.length === 0) return { ok: false, error: "No valid bounding boxes in bbox CSV" }
-
-  const index = await discoverTiffsAsync(posDir, pos)
-  if (index.size === 0) return { ok: false, error: `No TIFFs found in ${posDir}` }
-
-  const keys = [...index.keys()].sort()
-  const nChannels = new Set(keys.map((k) => Number.parseInt(k.split(",")[0], 10))).size
-  const nTimes = new Set(keys.map((k) => Number.parseInt(k.split(",")[1], 10))).size
-  const nZ = new Set(keys.map((k) => Number.parseInt(k.split(",")[2], 10))).size
-  sendProgress(0, `Discovered ${index.size} TIFFs: T=${nTimes}, C=${nChannels}, Z=${nZ}`)
-
-  const firstPath = index.get(keys[0])!
-  const sample = await readTiffFrameRaw(firstPath)
-  const dtype = sample.dtype
-
-  const outputRoot = path.join(output, "pos", String(pos).padStart(3, "0"))
-  await mkdir(path.join(outputRoot, "crop"), { recursive: true })
-
-  const cropDirs: string[] = []
-  for (let i = 0; i < bboxes.length; i++) {
-    const cropId = String(i).padStart(3, "0")
-    const cropDir = path.join(outputRoot, "crop", cropId)
-    await mkdir(cropDir, { recursive: true })
-    cropDirs.push(cropDir)
-
-    const bb = bboxes[i]
-    const zarray = {
-      zarr_format: 2,
-      shape: [nTimes, nChannels, nZ, bb.h, bb.w],
-      chunks: [1, 1, 1, bb.h, bb.w],
-      dtype,
-      compressor: null,
-      fill_value: null,
-    }
-    await writeFile(path.join(cropDir, ".zarray"), JSON.stringify(zarray), "utf8")
-    await writeFile(path.join(cropDir, ".zattrs"), JSON.stringify({ axis_names: ["t", "c", "z", "y", "x"], bbox: bb }), "utf8")
-  }
-
-  let bgDir: string | null = null
-  if (background) {
-    bgDir = path.join(outputRoot, "background")
-    await mkdir(bgDir, { recursive: true })
-    const zarray = {
-      zarr_format: 2,
-      shape: [nTimes, nChannels, nZ],
-      chunks: [1, 1, 1],
-      dtype: "<f8",
-      compressor: null,
-      fill_value: null,
-    }
-    await writeFile(path.join(bgDir, ".zarray"), JSON.stringify(zarray), "utf8")
-    await writeFile(path.join(bgDir, ".zattrs"), JSON.stringify({ axis_names: ["t", "c", "z"], description: "Median of pixels outside all crop bounding boxes" }), "utf8")
-  }
-
-  const mask = background ? (() => {
-    const m = new Array(sample.width * sample.height).fill(false)
-    for (const bb of bboxes) {
-      for (let dy = 0; dy < bb.h; dy++) {
-        for (let dx = 0; dx < bb.w; dx++) {
-          m[(bb.y + dy) * sample.width + (bb.x + dx)] = true
-        }
-      }
-    }
-    return m
-  })() : null
-
-  const total = keys.length
-  for (let i = 0; i < keys.length; i++) {
-    const [cStr, tStr, zStr] = keys[i].split(",")
-    const c = Number.parseInt(cStr, 10)
-    const t = Number.parseInt(tStr, 10)
-    const z = Number.parseInt(zStr, 10)
-    const filePath = index.get(keys[i])!
-    const frame = await readTiffFrameRaw(filePath)
-
-    for (let cropIdx = 0; cropIdx < bboxes.length; cropIdx++) {
-      const bb = bboxes[cropIdx]
-      const chunkBuf = extractCrop(
-        frame.data,
-        frame.width,
-        frame.height,
-        bb.x,
-        bb.y,
-        bb.w,
-        bb.h,
-        frame.bytesPerPixel
-      )
-      const chunkPath = path.join(cropDirs[cropIdx], `${t}.${c}.${z}.0.0`)
-      await writeFile(chunkPath, Buffer.from(chunkBuf))
-    }
-
-    if (bgDir != null && mask != null) {
-      const med = medianOutsideMask(frame.data, frame.width, frame.height, mask)
-      const chunkPath = path.join(bgDir, `${t}.${c}.${z}`)
-      const buf = new ArrayBuffer(8)
-      new DataView(buf).setFloat64(0, med, true)
-      await writeFile(chunkPath, Buffer.from(buf))
-    }
-
-    sendProgress((i + 1) / total, `Reading frames ${i + 1}/${total}`)
-  }
-
-  sendProgress(1, `Wrote ${output}`)
-  return { ok: true }
-}
-
-/** Precomputed viridis colormap (256 RGB entries) */
-const VIRIDIS_TABLE: number[][] = (() => {
-  const out: number[][] = []
-  for (let i = 0; i < 256; i++) {
-    const t = i / 255
-    const r = Math.round((0.267 + 0.3244 * t + 2.6477 * t * t - 4.4098 * t * t * t + 2.0942 * t * t * t * t) * 255)
-    const g = Math.round((0.0046 + 0.0495 * t + 2.5253 * t * t - 6.0613 * t * t * t + 3.7466 * t * t * t * t) * 255)
-    const b = Math.round((0.3294 + 0.1002 * t + 2.3256 * t * t - 3.1356 * t * t * t + 1.5046 * t * t * t * t) * 255)
-    out.push([Math.max(0, Math.min(255, r)), Math.max(0, Math.min(255, g)), Math.max(0, Math.min(255, b))])
-  }
-  return out
-})()
-
-/** Parse slice string: "all", "1,3", "0:10:2" */
-function parseSliceString(s: string, length: number): number[] {
-  const trimmed = s.trim().toLowerCase()
-  if (trimmed === "all") return [...Array(length).keys()]
-
-  const indices = new Set<number>()
-  for (const segment of s.split(",")) {
-    const seg = segment.trim()
-    if (!seg) continue
-    if (seg.includes(":")) {
-      const parts = seg.split(":").map((p) => (p === "" ? undefined : Number.parseInt(p, 10)))
-      if (parts.length === 3 && parts[2] === 0) throw new Error(`Slice step cannot be zero: ${seg}`)
-      const [start, end, step] = [parts[0] ?? 0, parts[1] ?? length, parts[2] ?? 1]
-      const s0 = start < 0 ? Math.max(0, length + start) : Math.min(start, length)
-      const e0 = end < 0 ? Math.max(0, length + end) : Math.min(end, length)
-      for (let i = s0; step > 0 ? i < e0 : i > e0; i += step) indices.add(i)
-    } else {
-      const idx = Number.parseInt(seg, 10)
-      if (idx < -length || idx >= length) throw new Error(`Index ${idx} out of range`)
-      indices.add(idx < 0 ? idx + length : idx)
-    }
-  }
-  return [...indices].sort((a, b) => a - b)
-}
-
-/** Apply colormap to normalized [0,1] value. Returns [r,g,b] 0-255. */
-function applyColormap(value: number, colormap: string): [number, number, number] {
-  const v = Math.max(0, Math.min(1, value))
-  if (colormap === "grayscale") {
-    const u = Math.round(v * 255)
-    return [u, u, u]
-  }
-  if (colormap === "hot") {
-    // black -> red -> yellow -> white
-    if (v < 1 / 3) {
-      const r = Math.round(v * 3 * 255)
-      return [r, 0, 0]
-    }
-    if (v < 2 / 3) {
-      const g = Math.round((v - 1 / 3) * 3 * 255)
-      return [255, g, 0]
-    }
-    const b = Math.round((v - 2 / 3) * 3 * 255)
-    return [255, 255, b]
-  }
-  if (colormap === "viridis") {
-    const idx = Math.min(255, Math.floor(v * 256))
-    return VIRIDIS_TABLE[idx] as [number, number, number]
-  }
-  const u = Math.round(v * 255)
-  return [u, u, u]
-}
-
-/** Draw white X marker at (y,x) */
-function drawMarker(frame: Uint8ClampedArray, width: number, height: number, y: number, x: number, size: number = 1): void {
-  for (let d = -size; d <= size; d++) {
-    for (const [dy, dx] of [
-      [d, d],
-      [d, -d],
-    ]) {
-      const yy = y + dy
-      const xx = x + dx
-      if (yy >= 0 && yy < height && xx >= 0 && xx < width) {
-        const i = (yy * width + xx) * 4
-        frame[i] = frame[i + 1] = frame[i + 2] = 255
-      }
-    }
-  }
-}
-
-async function runMovie(
-  request: RunMovieRequest,
-  sendProgress: (progress: number, message: string) => void
-): Promise<RunMovieResponse> {
-  const { input_zarr, pos, crop, channel, time, output, fps, colormap, spots } = request
-  const cropId = String(crop).padStart(3, "0")
-  const posId = String(pos).padStart(3, "0")
-  const workspacePath = path.dirname(input_zarr)
-
-  try {
-    const arr = await getCachedZarrArray(workspacePath, posId, cropId)
-    const [, nChannels] = arr.shape
-    if (channel >= nChannels) {
-      return { ok: false, error: `Channel ${channel} out of range (0-${nChannels - 1})` }
-    }
-  } catch (e) {
-    return { ok: false, error: `Crop ${cropId} not found in position ${posId}: ${e instanceof Error ? e.message : String(e)}` }
-  }
-
-  let timeIndices: number[]
-  try {
-    const arr = await getCachedZarrArray(workspacePath, posId, cropId)
-    timeIndices = parseSliceString(time, arr.shape[0])
-  } catch (e) {
-    return { ok: false, error: `Invalid time slice: ${e instanceof Error ? e.message : String(e)}` }
-  }
-
-  if (timeIndices.length === 0) {
-    return { ok: false, error: "No frames to write" }
-  }
-
-  const spotsByT: Map<number, Array<[number, number]>> = new Map()
-  if (spots) {
-    try {
-      const csvText = await readFile(spots, "utf8")
-      const lines = csvText.trim().split("\n")
-      if (lines.length > 1) {
-        const header = lines[0].toLowerCase()
-        const cols = header.split(",").map((c) => c.trim())
-        const tIdx = cols.indexOf("t")
-        const cropIdx = cols.indexOf("crop")
-        const yIdx = cols.indexOf("y")
-        const xIdx = cols.indexOf("x")
-        if (tIdx >= 0 && cropIdx >= 0 && yIdx >= 0 && xIdx >= 0) {
-          for (let i = 1; i < lines.length; i++) {
-            const parts = lines[i].split(",")
-            const cVal = parts[cropIdx]?.trim()
-            if (cVal !== cropId && cVal !== String(crop)) continue
-            const tVal = Number.parseInt(parts[tIdx] ?? "0", 10)
-            const yVal = Number.parseFloat(parts[yIdx] ?? "0")
-            const xVal = Number.parseFloat(parts[xIdx] ?? "0")
-            const list = spotsByT.get(tVal) ?? []
-            list.push([yVal, xVal])
-            spotsByT.set(tVal, list)
-          }
-        }
-      }
-    } catch {
-      // ignore spots load errors
-    }
-  }
-
-  const framesRaw: Float64Array[] = []
-  const arr = await getCachedZarrArray(workspacePath, posId, cropId)
-  const [, , , height, width] = arr.shape
-
-  for (let i = 0; i < timeIndices.length; i++) {
-    const t = timeIndices[i]
-    sendProgress((i + 1) / timeIndices.length * 0.4, `Reading frames ${i + 1}/${timeIndices.length}`)
-    const resp = await loadZarrFrame({
-      workspacePath,
-      posId,
-      cropId,
-      t,
-      c: channel,
-      z: 0,
-    })
-    if (!resp.ok) return { ok: false, error: resp.error }
-    const data = new Uint8Array(resp.data)
-    const u16 = new Uint16Array(data.buffer, data.byteOffset, data.byteLength / 2)
-    const f64 = new Float64Array(height * width)
-    for (let j = 0; j < u16.length; j++) f64[j] = u16[j]
-    framesRaw.push(f64)
-  }
-
-  let globalMin = Infinity
-  let globalMax = -Infinity
-  for (const f of framesRaw) {
-    for (let i = 0; i < f.length; i++) {
-      if (f[i] < globalMin) globalMin = f[i]
-      if (f[i] > globalMax) globalMax = f[i]
-    }
-  }
-
-  const range = globalMax - globalMin
-  const frames: Uint8ClampedArray[] = []
-
-  for (let fi = 0; fi < framesRaw.length; fi++) {
-    const frameRaw = framesRaw[fi]
-    const rgba = new Uint8ClampedArray(width * height * 4)
-    for (let i = 0; i < frameRaw.length; i++) {
-      const norm = range > 0 ? (frameRaw[i] - globalMin) / range : 0
-      const [r, g, b] = applyColormap(norm, colormap)
-      rgba[i * 4] = r
-      rgba[i * 4 + 1] = g
-      rgba[i * 4 + 2] = b
-      rgba[i * 4 + 3] = 255
-    }
-    const tVal = timeIndices[fi]
-    const spotList = spotsByT.get(tVal)
-    if (spotList) {
-      for (const [yf, xf] of spotList) {
-        drawMarker(rgba, width, height, Math.round(yf), Math.round(xf))
-      }
-    }
-    frames.push(rgba)
-  }
-
-  let outW = width
-  let outH = height
-  const padH = (16 - (height % 16)) % 16
-  const padW = (16 - (width % 16)) % 16
-  if (padH > 0 || padW > 0) {
-    outW = width + padW
-    outH = height + padH
-    const padded: Uint8ClampedArray[] = []
-    for (const f of frames) {
-      const p = new Uint8ClampedArray(outW * outH * 4)
-      p.fill(0)
-      for (let y = 0; y < height; y++) {
-        p.set(f.subarray(y * width * 4, (y + 1) * width * 4), y * outW * 4)
-      }
-      padded.push(p)
-    }
-    frames.length = 0
-    frames.push(...padded)
-  }
-
-  await mkdir(path.dirname(output), { recursive: true })
-
-  const ffmpegMod = await import("ffmpeg-static")
-  const ffmpegPath: string | null =
-    typeof ffmpegMod === "object" && ffmpegMod !== null && "default" in ffmpegMod
-      ? (ffmpegMod as { default: string | null }).default
-      : null
-  if (!ffmpegPath || typeof ffmpegPath !== "string") {
-    return { ok: false, error: "ffmpeg binary not found" }
-  }
-  const args = [
-    "-f", "rawvideo",
-    "-pix_fmt", "rgb24",
-    "-s", `${outW}x${outH}`,
-    "-r", String(fps),
-    "-i", "pipe:0",
-    "-c:v", "libx264",
-    "-pix_fmt", "yuv420p",
-    "-preset", "slow",
-    "-crf", "15",
-    "-y",
-    output,
-  ]
-
-  return new Promise((resolve) => {
-    const proc = spawn(ffmpegPath, args, {
-      stdio: ["pipe", "ignore", "ignore"],
-    }) as ReturnType<typeof spawn> & { stdin: NodeJS.WritableStream }
-    let written = 0
-    const writeNext = () => {
-      if (written >= frames.length) {
-        proc.stdin.end()
-        proc.on("close", (code: number | null) => {
-          if (code === 0) {
-            sendProgress(1, `Wrote ${output}`)
-            resolve({ ok: true })
-          } else {
-            resolve({ ok: false, error: `ffmpeg exited with code ${code}` })
-          }
-        })
-        return
-      }
-      const frame = frames[written]
-      const rgb = new Uint8Array(outW * outH * 3)
-      for (let i = 0; i < outW * outH; i++) {
-        rgb[i * 3] = frame[i * 4]
-        rgb[i * 3 + 1] = frame[i * 4 + 1]
-        rgb[i * 3 + 2] = frame[i * 4 + 2]
-      }
-      const ok = proc.stdin.write(rgb)
-      written++
-      sendProgress(0.4 + (written / frames.length) * 0.6, `Encoding ${written}/${frames.length}`)
-      if (ok) {
-        setImmediate(writeNext)
-      } else {
-        proc.stdin.once("drain", writeNext)
-      }
-    }
-    writeNext()
-  })
 }
 
 async function getZarrDeps(): Promise<{
@@ -1151,129 +685,6 @@ async function loadZarrFrame({
     const message = error instanceof Error ? error.message : String(error)
     return { ok: false, error: message || "Failed to load frame." }
   }
-}
-
-function sumArray(data: ArrayLike<number>): number {
-  let s = 0
-  for (let i = 0; i < data.length; i++) s += data[i]
-  return s
-}
-
-async function expressionAnalyze(
-  request: ExpressionAnalyzeRequest,
-  options?: { output?: string; sendProgress?: (progress: number, message: string) => void }
-): Promise<ExpressionAnalyzeResponse> {
-  const { workspacePath, pos, channel } = request
-  const sendProgress = options?.sendProgress
-  try {
-    const posId = String(pos).padStart(3, "0")
-    const cropRoot = path.join(workspacePath, "crops.zarr", "pos", posId, "crop")
-
-    let cropIds: string[]
-    try {
-      const entries = await readdir(cropRoot, { withFileTypes: true })
-      cropIds = entries
-        .filter((e) => e.isDirectory())
-        .map((e) => e.name)
-        .sort()
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      return { ok: false, error: `Failed to read crop dir: ${msg}` }
-    }
-
-    if (cropIds.length === 0) {
-      if (options?.output) {
-        await mkdir(path.dirname(options.output), { recursive: true })
-        await writeFile(options.output, "t,crop,intensity,area,background\n", "utf8")
-      }
-      return { ok: true, rows: [] }
-    }
-
-    const context = await getZarrContext(workspacePath)
-    const { zarr } = await getZarrDeps()
-    let bgArr: ZarrArrayHandle | null = null
-    try {
-      const bgLoc = context.root.resolve(`pos/${posId}/background`)
-      bgArr = await zarr.open(bgLoc as Parameters<typeof zarr.open>[0], { kind: "array" })
-    } catch {
-      // no background array, use 0
-    }
-
-    const rows: ExpressionAnalyzeRow[] = []
-    const total = cropIds.length
-
-    for (let i = 0; i < total; i++) {
-      const cropId = cropIds[i]
-      let arr: ZarrArrayHandle
-      try {
-        arr = await getCachedZarrArray(workspacePath, posId, cropId)
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err)
-        return { ok: false, error: `Failed to open crop ${cropId}: ${msg}` }
-      }
-
-      const [nT, , , h, w] = arr.shape
-      const area = h * w
-
-      for (let t = 0; t < nT; t++) {
-        let chunk: ZarrChunk
-        try {
-          chunk = await arr.getChunk([t, channel, 0, 0, 0])
-        } catch (err) {
-          context.arrays.delete(`${posId}/${cropId}`)
-          arr = await getCachedZarrArray(workspacePath, posId, cropId)
-          chunk = await arr.getChunk([t, channel, 0, 0, 0])
-        }
-
-        const source = chunk.data as ArrayLike<number>
-        const intensity = sumArray(source)
-
-        let background = 0
-        if (bgArr && t < bgArr.shape[0] && channel < bgArr.shape[1]) {
-          try {
-            const bgChunk = await bgArr.getChunk([t, channel, 0])
-            const bgData = bgChunk.data as ArrayLike<number>
-            background = bgData.length > 0 ? bgData[0] : 0
-          } catch {
-            // keep 0
-          }
-        }
-
-        rows.push({ t, crop: cropId, intensity, area, background })
-      }
-
-      if (sendProgress && total > 0) {
-        sendProgress((i + 1) / total, `Processing crop ${i + 1}/${total}`)
-      }
-    }
-
-    if (options?.output) {
-      await mkdir(path.dirname(options.output), { recursive: true })
-      const lines = ["t,crop,intensity,area,background", ...rows.map((r) => `${r.t},${r.crop},${r.intensity},${r.area},${r.background}`)]
-      await writeFile(options.output, lines.join("\n"), "utf8")
-      if (sendProgress) sendProgress(1.0, `Wrote ${rows.length} rows to ${options.output}`)
-    }
-
-    return { ok: true, rows }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    return { ok: false, error: message || "Expression analyze failed." }
-  }
-}
-
-async function runExpressionAnalyzeTask(
-  request: RunExpressionAnalyzeRequest,
-  sendProgress: (progress: number, message: string) => void
-): Promise<RunExpressionAnalyzeResponse> {
-  const { taskId: _taskId, workspacePath, pos, channel, output } = request
-  const result = await expressionAnalyze(
-    { workspacePath, pos, channel },
-    { output, sendProgress }
-  )
-  if (result.ok) {
-    return { ok: true, output, rows: result.rows }
-  }
-  return { ok: false, error: result.error }
 }
 
 async function runKillPredictTask(
@@ -1760,7 +1171,43 @@ function registerWorkspaceStateIpc(): void {
         })
         updateTask(payload.taskId, { progress_events: progressEvents }).catch(() => {})
       }
-      const result = await runMovie(payload, sendProgress)
+      const ffmpegMod = await import("ffmpeg-static")
+      const ffmpegPath =
+        typeof ffmpegMod === "object" && ffmpegMod !== null && "default" in ffmpegMod
+          ? (ffmpegMod as { default: string | null }).default
+          : null
+      if (!ffmpegPath || typeof ffmpegPath !== "string") {
+        await updateTask(payload.taskId, {
+          status: "failed",
+          finished_at: new Date().toISOString(),
+          error: "ffmpeg binary not found",
+          progress_events: progressEvents,
+        })
+        return { ok: false, error: "ffmpeg binary not found" }
+      }
+      const args = [
+        "movie",
+        "--input-zarr",
+        payload.input_zarr,
+        "--pos",
+        String(payload.pos),
+        "--crop",
+        String(payload.crop),
+        "--channel",
+        String(payload.channel),
+        "--time",
+        payload.time,
+        "--output",
+        payload.output,
+        "--fps",
+        String(payload.fps),
+        "--colormap",
+        payload.colormap,
+        "--ffmpeg",
+        ffmpegPath,
+        ...(payload.spots ? ["--spots", payload.spots] : []),
+      ]
+      const result = await runMupatternSubprocess(args, sendProgress)
       await updateTask(payload.taskId, {
         status: result.ok ? "succeeded" : "failed",
         finished_at: new Date().toISOString(),
@@ -1791,15 +1238,36 @@ function registerWorkspaceStateIpc(): void {
         })
         updateTask(payload.taskId, { progress_events: progressEvents }).catch(() => {})
       }
-      const result = await runExpressionAnalyzeTask(payload, sendProgress)
+      const args = [
+        "expression",
+        "--workspace",
+        payload.workspacePath,
+        "--pos",
+        String(payload.pos),
+        "--channel",
+        String(payload.channel),
+        "--output",
+        payload.output,
+      ]
+      const result = await runMupatternSubprocess(args, sendProgress)
+      if (!result.ok) {
+        await updateTask(payload.taskId, {
+          status: "failed",
+          finished_at: new Date().toISOString(),
+          error: result.error,
+          progress_events: progressEvents,
+        })
+        return result
+      }
+      const rows = await parseExpressionCsv(payload.output)
       await updateTask(payload.taskId, {
-        status: result.ok ? "succeeded" : "failed",
+        status: "succeeded",
         finished_at: new Date().toISOString(),
-        error: result.ok ? null : result.error,
-        result: result.ok ? { output: result.output, rows: result.rows } : undefined,
+        error: null,
+        result: { output: payload.output, rows },
         progress_events: progressEvents,
       })
-      return result
+      return { ok: true, output: payload.output, rows }
     }
   )
 
@@ -1855,7 +1323,19 @@ function registerWorkspaceStateIpc(): void {
         })
         updateTask(payload.taskId, { progress_events: progressEvents }).catch(() => {})
       }
-      const result = await runCrop(payload, sendProgress)
+      const args = [
+        "crop",
+        "--input",
+        payload.input_dir,
+        "--pos",
+        String(payload.pos),
+        "--bbox",
+        payload.bbox,
+        "--output",
+        payload.output,
+        ...(payload.background ? ["--background"] : []),
+      ]
+      const result = await runMupatternSubprocess(args, sendProgress)
       await updateTask(payload.taskId, {
         status: result.ok ? "succeeded" : "failed",
         finished_at: new Date().toISOString(),

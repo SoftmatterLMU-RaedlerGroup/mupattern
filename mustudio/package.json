@@ -10,7 +10,8 @@
     "build:renderer": "tsc && vite build",
     "build": "bun run build:electron && bun run build:renderer",
     "preview": "vite preview",
-    "start": "bun run build:electron && electron ."
+    "start": "bun run build:electron && electron .",
+    "postinstall": "electron-rebuild -f"
   },
   "dependencies": {
     "@mupattern/shared": "workspace:*",
@@ -51,6 +52,16 @@
     "tailwindcss": "^4.0.0",
     "typescript": "^5.6.3",
     "vite": "^6.0.3",
-    "wait-on": "^8.0.5"
+    "wait-on": "^8.0.5",
+    "electron-rebuild": "^3.2.9"
+  },
+  "build": {
+    "extraResources": [
+      {
+        "from": "../packages/mupattern-cli/target/release/",
+        "to": "bin",
+        "filter": ["mupattern*"]
+      }
+    ]
   }
 }

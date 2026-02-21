@@ -65,7 +65,7 @@ ND2 ──► muapplication file convert ──► raw TIFFs ──► /register
 |---------|----------|-------------|
 | `mupattern/` | React/Vite | Web app: simple landing page + pattern registration (Register) + crop viewer (See) |
 | `mustudio/` | Electron + React/Vite | Desktop app: workspace dashboard + workspace-integrated Register/See experience |
-| `muapplication/` | Python backend (CLI/API/GUI) | Unified backend with file, kill, expression, spot, and tissue domains for MuStudio |
+| `muapplication/` | Python CLI (reference) | Pure CLI reference implementation; prod uses mustudio with compiled Rust binary + ONNX |
 
 ## Prerequisites
 
@@ -529,26 +529,6 @@ sources:
     crop_range: [0, 125]   # [start, end), optional
 ```
 
-## GUI executables
-
-`muapplication` includes file and expression GUI apps (CustomTkinter) for users who prefer a graphical interface.
-
-**Run from source:**
-
-```bash
-uv run muapplication-file-gui
-uv run muapplication-expression-gui
-```
-
-**Build standalone executables** (Windows, no Python install required):
-
-```bash
-uv run pyinstaller pyinstaller/mufile_gui.spec --noconfirm
-uv run pyinstaller pyinstaller/muexpression_gui.spec --noconfirm
-```
-
-Outputs: `dist/mufile-gui.exe` and `dist/muexpression-gui.exe`. These bundles do not include PyTorch.
-
 ## Development
 
 ```bash
@@ -575,5 +555,5 @@ uv run muapplication spot --help
 
 - **mupattern** (web register + see): React 18, TypeScript, Vite, React Router, TanStack Store, Tailwind CSS 4, shadcn/ui, HTML5 Canvas, File System Access API
 - **mustudio** (desktop workspace): Electron, React 18, TypeScript, Vite, React Router, TanStack Store
-- **muapplication**: Python, typer, FastAPI, zarr v2, tifffile, nd2, transformers (HuggingFace), torch, cellpose, spotiflow, pandas, matplotlib
+- **muapplication** (CLI reference): Python, typer, zarr v2, tifffile, nd2, transformers, torch, cellpose, spotiflow, pandas, matplotlib
 
